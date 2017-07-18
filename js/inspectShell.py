@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=import-error,invalid-name,line-too-long,missing-docstring,wrong-import-position
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this file,
-# You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
 
 import os
 import platform
@@ -16,16 +20,15 @@ import subprocesses as sps
 path2 = os.path.abspath(os.path.join(path0, os.pardir, os.pardir, 'lithium', 'interestingness'))
 sys.path.append(path2)
 if not os.path.exists(path2):
-    print "Please check out Lithium and FuzzManager side-by-side with funfuzz. Links in https://github.com/MozillaSecurity/funfuzz/#setup"
+    print("Please check out Lithium and FuzzManager side-by-side with funfuzz. Links in https://github.com/MozillaSecurity/funfuzz/#setup")
     sys.exit(2)
 import envVars
 
+RUN_NSPR_LIB = ''
+RUN_PLDS_LIB = ''
+RUN_PLC_LIB = ''
 
 if sps.isWin:
-    COMPILE_NSPR_LIB = 'libnspr4.lib' if sps.isMozBuild64 else 'nspr4.lib'
-    COMPILE_PLDS_LIB = 'libplds4.lib' if sps.isMozBuild64 else 'plds4.lib'
-    COMPILE_PLC_LIB = 'libplc4.lib' if sps.isMozBuild64 else 'plc4.lib'
-
     # Update if the following changes:
     # https://dxr.mozilla.org/mozilla-central/search?q=%3C%2FOutputFile%3E+.dll+path%3Aintl%2Ficu%2Fsource%2F&case=true
     RUN_ICUUC_LIB_EXCL_EXT = 'icuuc'
@@ -48,30 +51,17 @@ if sps.isWin:
     RUN_PLDS_LIB = 'plds4.dll'
     RUN_PLC_LIB = 'plc4.dll'
     RUN_TESTPLUG_LIB = 'testplug.dll'
-else:
-    COMPILE_NSPR_LIB = 'libnspr4.a'
-    COMPILE_PLDS_LIB = 'libplds4.a'
-    COMPILE_PLC_LIB = 'libplc4.a'
+elif platform.system() == 'Darwin':
+    RUN_MOZGLUE_LIB = 'libmozglue.dylib'
+elif platform.system() == 'Linux':
+    RUN_MOZGLUE_LIB = 'libmozglue.so'
 
-    if platform.system() == 'Darwin':
-        RUN_MOZGLUE_LIB = 'libmozglue.dylib'
-        RUN_NSPR_LIB = 'libnspr4.dylib'
-        RUN_PLDS_LIB = 'libplds4.dylib'
-        RUN_PLC_LIB = 'libplc4.dylib'
-    elif platform.system() == 'Linux':
-        RUN_MOZGLUE_LIB = 'libmozglue.so'
-        RUN_NSPR_LIB = 'libnspr4.so'
-        RUN_PLDS_LIB = 'libplds4.so'
-        RUN_PLC_LIB = 'libplc4.so'
-
-# These are only for compiling NSPR, and should be in dist/lib
-ALL_COMPILE_LIBS = (COMPILE_NSPR_LIB, COMPILE_PLDS_LIB, COMPILE_PLC_LIB)
-# These include running the js shell (mozglue) and/or with NSPR (for older threadsafe builds),
-# and should be in dist/bin. At least Windows required the ICU libraries.
+# These include running the js shell (mozglue) and should be in dist/bin.
+# At least Windows required the ICU libraries.
 ALL_RUN_LIBS = [RUN_MOZGLUE_LIB, RUN_NSPR_LIB, RUN_PLDS_LIB, RUN_PLC_LIB]
 if sps.isWin:
     ALL_RUN_LIBS.append(RUN_TESTPLUG_LIB)
-    for icu_ver in (52, 55):
+    for icu_ver in (52, 55, 56):
         ALL_RUN_LIBS.append(RUN_ICUUC_LIB_EXCL_EXT + str(icu_ver) + '.dll')
         ALL_RUN_LIBS.append(RUN_ICUUCD_LIB_EXCL_EXT + str(icu_ver) + '.dll')
         ALL_RUN_LIBS.append(RUN_ICUIN_LIB_EXCL_EXT + str(icu_ver) + '.dll')
@@ -87,7 +77,7 @@ if sps.isWin:
 
 
 def archOfBinary(binary):
-    '''This function tests if a binary is 32-bit or 64-bit.'''
+    """Test if a binary is 32-bit or 64-bit."""
     unsplitFiletype = sps.captureStdout(['file', binary])[0]
     filetype = unsplitFiletype.split(':', 1)[1]
     if sps.isWin:
@@ -105,7 +95,7 @@ def archOfBinary(binary):
 
 
 def constructVgCmdList(errorCode=77):
-    '''Constructs default parameters needed to run valgrind with.'''
+    """Construct default parameters needed to run valgrind with."""
     vgCmdList = []
     vgCmdList.append('valgrind')
     if sps.isMac:
@@ -125,10 +115,10 @@ def constructVgCmdList(errorCode=77):
 
 
 def shellSupports(shellPath, args):
-    '''
-    This function returns True if the shell likes the args.
-    You can support for a function, e.g. ['-e', 'foo()'], or a flag, e.g. ['-j', '-e', '42'].
-    '''
+    """Return True if the shell likes the args.
+
+    You can add support for a function, e.g. ['-e', 'foo()'], or a flag, e.g. ['-j', '-e', '42'].
+    """
     retCode = testBinary(shellPath, args, False)[1]
     if retCode == 0:
         return True
@@ -143,7 +133,7 @@ def shellSupports(shellPath, args):
 
 
 def testBinary(shellPath, args, useValgrind):
-    '''Tests the given shell with the given args.'''
+    """Test the given shell with the given args."""
     testCmd = (constructVgCmdList() if useValgrind else []) + [shellPath] + args
     sps.vdump('The testing command is: ' + sps.shellify(testCmd))
     out, rCode = sps.captureStdout(testCmd, combineStderr=True, ignoreStderr=True,
@@ -154,19 +144,19 @@ def testBinary(shellPath, args, useValgrind):
 
 
 def testJsShellOrXpcshell(s):
-    '''This function tests if a binary is a js shell or xpcshell.'''
+    """Test if a binary is a js shell or xpcshell."""
     return 'xpcshell' if shellSupports(s, ['-e', 'Components']) else 'jsShell'
 
 
 def queryBuildConfiguration(s, parameter):
-    '''Tests if a binary is compiled with specified parameters, in getBuildConfiguration().'''
+    """Test if a binary is compiled with specified parameters, in getBuildConfiguration()."""
     ans = testBinary(s, ['-e', 'print(getBuildConfiguration()["' + parameter + '"])'],
                      False)[0]
     return ans.find('true') != -1
 
 
 def testIsHardFpShellARM(s):
-    '''Tests if the ARM shell is compiled with hardfp support.'''
+    """Test if the ARM shell is compiled with hardfp support."""
     readelfBin = '/usr/bin/readelf'
     if os.path.exists(readelfBin):
         newEnv = envVars.envWithPath(os.path.dirname(os.path.abspath(s)))
@@ -177,7 +167,7 @@ def testIsHardFpShellARM(s):
 
 
 def verifyBinary(sh):
-    '''Verifies that the binary is compiled as intended.'''
+    """Verify that the binary is compiled as intended."""
     binary = sh.getShellCacheFullPath()
 
     assert archOfBinary(binary) == ('32' if sh.buildOptions.enable32 else '64')
@@ -192,3 +182,6 @@ def verifyBinary(sh):
     assert queryBuildConfiguration(binary, 'asan') == sh.buildOptions.buildWithAsan
     assert (queryBuildConfiguration(binary, 'arm-simulator') and sh.buildOptions.enable32) == sh.buildOptions.enableSimulatorArm32
     assert (queryBuildConfiguration(binary, 'arm-simulator') and not sh.buildOptions.enable32) == sh.buildOptions.enableSimulatorArm64
+    # Note that we should test whether a shell has profiling turned on or not.
+    # m-c rev 324836:800a887c705e turned profiling on by default, so once this is beyond the
+    # earliest known working revision, we can probably test it here.

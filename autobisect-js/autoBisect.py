@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=broad-except,import-error,invalid-name,invalid-unary-operand-type,line-too-long,literal-comparison,missing-docstring,no-else-return,too-many-arguments,too-many-boolean-expressions,too-many-branches,too-many-locals,too-many-return-statements,too-many-statements,wrong-import-position
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this file,
-# You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
 
 import math
 import tempfile
@@ -13,7 +17,7 @@ import stat
 import subprocess
 import sys
 import time
-from optparse import OptionParser
+from optparse import OptionParser  # pylint: disable=deprecated-module
 
 import knownBrokenEarliestWorking as kbew
 
@@ -25,9 +29,6 @@ path2 = os.path.abspath(os.path.join(path0, os.pardir, 'js'))
 sys.path.append(path2)
 import compileShell
 import inspectShell
-path3 = os.path.abspath(os.path.join(path0, os.pardir, 'dom', 'automation'))
-sys.path.append(path3)
-import buildBrowser
 path4 = os.path.abspath(os.path.join(path0, os.pardir, 'util'))
 sys.path.append(path4)
 import fileManipulation
@@ -70,35 +71,32 @@ def parseOpts():
                       help='Specify js shell build options, e.g. -b "--enable-debug --32" (python buildOptions.py --help)')
     parser.add_option('-B', '--browser',
                       dest='browserOptions',
-                      help='Specify browser build options, e.g. -b "-c mozconfig"')
+                      help='Specify browser build options, e.g. -b "-c mozconfig". Deprecated.')
 
     parser.add_option('--resetToTipFirst', dest='resetRepoFirst',
                       action='store_true',
-                      help='First reset to default tip overwriting all local changes. ' +
-                      'Equivalent to first executing `hg update -C default`. ' +
-                      'Defaults to "%default".')
+                      help="First reset to default tip overwriting all local changes. "
+                           "Equivalent to first executing `hg update -C default`. Defaults to '%default'.")
 
     # Specify the revisions between which to bisect.
     parser.add_option('-s', '--startRev', dest='startRepo',
-                      help='Earliest changeset/build numeric ID to consider (usually a "good" cset). ' +
-                      'Defaults to the earliest revision known to work at all/available.')
+                      help="Earliest changeset/build numeric ID to consider (usually a 'good' cset). "
+                           "Defaults to the earliest revision known to work at all/available.")
     parser.add_option('-e', '--endRev', dest='endRepo',
-                      help='Latest changeset/build numeric ID to consider (usually a "bad" cset). ' +
-                      'Defaults to the head of the main branch, "default", or latest available build.')
+                      help="Latest changeset/build numeric ID to consider (usually a 'bad' cset). "
+                           "Defaults to the head of the main branch, 'default', or latest available build.")
     parser.add_option('-k', '--skipInitialRevs', dest='testInitialRevs',
                       action='store_false',
-                      help='Skip testing the -s and -e revisions and automatically trust them ' +
-                      'as -g and -b.')
+                      help="Skip testing the -s and -e revisions and automatically trust them as -g and -b.")
 
     # Specify the type of failure to look for.
     # (Optional -- by default, internalTestAndLabel will look for exit codes that indicate a crash or assert.)
     parser.add_option('-o', '--output', dest='output',
-                      help='Stdout or stderr output to be observed. Defaults to "%default". ' +
-                      'For assertions, set to "ssertion fail"')
+                      help="Stdout or stderr output to be observed. Defaults to '%default'. "
+                           "For assertions, set to 'ssertion fail'")
     parser.add_option('-w', '--watchExitCode', dest='watchExitCode',
                       type='int',
-                      help='Look out for a specific exit code. Only this exit code will be ' +
-                      'considered "bad".')
+                      help="Look out for a specific exit code. Only this exit code will be considered 'bad'.")
     parser.add_option('-i', '--useInterestingnessTests',
                       dest='useInterestingnessTests',
                       action="store_true",
@@ -111,32 +109,29 @@ def parseOpts():
     # Specify how to treat revisions that fail to compile.
     # (You might want to add these to kbew.knownBrokenRanges in knownBrokenEarliestWorking.py.)
     parser.add_option('-l', '--compilationFailedLabel', dest='compilationFailedLabel',
-                      help='Specify how to treat revisions that fail to compile. ' +
-                      '(bad, good, or skip) Defaults to "%default"')
+                      help="Specify how to treat revisions that fail to compile. "
+                           "(bad, good, or skip) Defaults to '%default'")
 
     parser.add_option('-T', '--useTreeherderBinaries',
                       dest='useTreeherderBinaries',
                       action="store_true",
-                      help='Use treeherder binaries for quick bisection, assuming a fast ' +
-                      'internet connection. Defaults to "%default"')
+                      help="Use treeherder binaries for quick bisection, assuming a fast "
+                           "internet connection. Defaults to '%default'")
     parser.add_option('-N', '--nameOfTreeherderBranch',
                       dest='nameOfTreeherderBranch',
                       help='Name of the branch to download. Defaults to "%default"')
 
     (options, args) = parser.parse_args()
-    if options.browserOptions:
-        assert not options.buildOptions
-        options.browserOptions = buildBrowser.parseOptions(options.browserOptions.split())
-        options.skipRevs = ' + '.join(kbew.knownBrokenRangesBrowser(options.browserOptions))
-    else:
+    if not options.browserOptions:
         options.buildOptions = buildOptions.parseShellOptions(options.buildOptions)
         options.skipRevs = ' + '.join(kbew.knownBrokenRanges(options.buildOptions))
 
     options.paramList = [sps.normExpUserPath(x) for x in options.parameters.split(' ') if x]
     # First check that the testcase is present.
     if '-e 42' not in options.parameters and not os.path.isfile(options.paramList[-1]):
-        print '\nList of parameters to be passed to the shell is: ' + ' '.join(options.paramList)
-        print
+        print()
+        print("List of parameters to be passed to the shell is: %s" % " ".join(options.paramList))
+        print()
         raise Exception('Testcase at ' + options.paramList[-1] + ' is not present.')
 
     assert options.compilationFailedLabel in ('bad', 'good', 'skip')
@@ -145,7 +140,7 @@ def parseOpts():
 
     if options.useInterestingnessTests:
         if len(args) < 1:
-            print 'args are: ' + args
+            print("args are: %s" % args)
             parser.error('Not enough arguments.')
         if not options.browserOptions:
             for a in args:
@@ -158,26 +153,28 @@ def parseOpts():
             parser.error('Too many arguments.')
         options.testAndLabel = internalTestAndLabel(options)
 
-    if options.browserOptions:
-        earliestKnownQuery = kbew.earliestKnownWorkingRevForBrowser(options.browserOptions)
-    else:
+    if not options.browserOptions:
         earliestKnownQuery = kbew.earliestKnownWorkingRev(options.buildOptions, options.paramList + extraFlags, options.skipRevs)
 
-    earliestKnown = hgCmds.getRepoHashAndId(options.buildOptions.repoDir, repoRev=earliestKnownQuery)[0]
+    earliestKnown = ''
+
+    if not options.useTreeherderBinaries:
+        earliestKnown = hgCmds.getRepoHashAndId(options.buildOptions.repoDir, repoRev=earliestKnownQuery)[0]
 
     if options.startRepo is None:
         if options.useTreeherderBinaries:
             options.startRepo = 'default'
         else:
             options.startRepo = earliestKnown
-    elif not (options.useTreeherderBinaries or hgCmds.isAncestor(options.buildOptions.repoDir, earliestKnown, options.startRepo)):
-        raise Exception('startRepo is not a descendant of kbew.earliestKnownWorkingRev for this configuration')
-
-    if not options.useTreeherderBinaries and not hgCmds.isAncestor(options.buildOptions.repoDir, earliestKnown, options.endRepo):
-        raise Exception('endRepo is not a descendant of kbew.earliestKnownWorkingRev for this configuration')
+    # elif not (options.useTreeherderBinaries or hgCmds.isAncestor(options.buildOptions.repoDir, earliestKnown, options.startRepo)):
+    #     raise Exception('startRepo is not a descendant of kbew.earliestKnownWorkingRev for this configuration')
+    #
+    # if not options.useTreeherderBinaries and not hgCmds.isAncestor(options.buildOptions.repoDir, earliestKnown, options.endRepo):
+    #     raise Exception('endRepo is not a descendant of kbew.earliestKnownWorkingRev for this configuration')
 
     if options.parameters == '-e 42':
-        print "Note: since no parameters were specified, we're just ensuring the shell does not crash on startup/shutdown."
+        print("Note: since no parameters were specified, "
+              "we're just ensuring the shell does not crash on startup/shutdown.")
 
     if options.nameOfTreeherderBranch != 'mozilla-inbound' and not options.useTreeherderBinaries:
         raise Exception('Setting the name of branches only works for treeherder shell bisection.')
@@ -186,7 +183,7 @@ def parseOpts():
 
 
 def findBlamedCset(options, repoDir, testRev):
-    print sps.dateStr()
+    print("%s | Bisecting on: %s" % (sps.dateStr(), repoDir))
 
     hgPrefix = ['hg', '-R', repoDir]
 
@@ -235,15 +232,14 @@ def findBlamedCset(options, repoDir, testRev):
             # bustage would be faster. 20 total skips being roughly the time that the pair of
             # bisections would take.
             if skipCount > 20:
-                print 'Skipped 20 times, stopping autoBisect.'
+                print("Skipped 20 times, stopping autoBisect.")
                 break
-        print label[0] + " (" + label[1] + ") ",
+        print("%s (%s) " % (label[0], label[1]), end="")
 
         if iterNum <= 0:
-            print 'Finished testing the initial boundary revisions...',
+            print("Finished testing the initial boundary revisions...", end="")
         else:
-            print "Bisecting for the n-th round where n is", iterNum, "and 2^n is", \
-                  str(2**iterNum), "...",
+            print("Bisecting for the n-th round where n is %s and 2^n is %s ..." % (iterNum, 2**iterNum), end="")
         (blamedGoodOrBad, blamedRev, currRev, sRepo, eRepo) = \
             bisectLabel(hgPrefix, options, label[0], currRev, sRepo, eRepo)
 
@@ -255,7 +251,7 @@ def findBlamedCset(options, repoDir, testRev):
         iterNum += 1
         endTime = time.time()
         oneRunTime = endTime - startTime
-        print 'This iteration took %.3f seconds to run.' % oneRunTime
+        print("This iteration took %.3f seconds to run." % oneRunTime)
 
     if blamedRev is not None:
         checkBlameParents(repoDir, blamedRev, blamedGoodOrBad, labels, testRev, realStartRepo,
@@ -268,11 +264,11 @@ def findBlamedCset(options, repoDir, testRev):
     sps.captureStdout(hgPrefix + ['update', '-C', '-r', 'default'], ignoreStderr=True)
     hgCmds.destroyPyc(repoDir)
 
-    print sps.dateStr()
+    print(sps.dateStr())
 
 
 def internalTestAndLabel(options):
-    '''Use autoBisectJs without interestingness tests to examine the revision of the js shell.'''
+    """Use autoBisectJs without interestingness tests to examine the revision of the js shell."""
     def inner(shellFilename, _hgHash):
         (stdoutStderr, exitCode) = inspectShell.testBinary(shellFilename, options.paramList,
                                                            options.buildOptions.runWithVg)
@@ -287,8 +283,7 @@ def internalTestAndLabel(options):
             # On Unix-based systems, the exit code for signals is negative, so we check if
             # 128 + abs(exitCode) meets our specified signal exit code.
             if options.watchExitCode is not None and 128 - exitCode == options.watchExitCode:
-                return ('bad', 'Specified-bad exit code ' + str(exitCode) +
-                        ' (after converting to signal)')
+                return ("bad", "Specified-bad exit code %s (after converting to signal)" % exitCode)
             elif (stdoutStderr.find(options.output) == -1) and (options.output != ''):
                 return ('good', 'Bad output, but not the specified one')
             elif options.watchExitCode is not None and 128 - exitCode != options.watchExitCode:
@@ -302,8 +297,7 @@ def internalTestAndLabel(options):
                  stdoutStderr.find('Error: Short option followed by junk') != -1 or
                  stdoutStderr.find('Error: Invalid long option:') != -1 or
                  stdoutStderr.find('Error: Invalid short option:') != -1):
-            return ('good', 'Exit code 1 or 2 - js shell quits ' +
-                    'because it does not support a given CLI parameter')
+            return ("good", "Exit code 1 or 2 - js shell quits because it does not support a given CLI parameter")
         elif 3 <= exitCode <= 6:
             return ('good', 'Acceptable exit code ' + str(exitCode))
         elif options.watchExitCode is not None:
@@ -314,7 +308,7 @@ def internalTestAndLabel(options):
 
 
 def externalTestAndLabel(options, interestingness):
-    '''Make use of interestingness scripts to decide whether the changeset is good or bad.'''
+    """Make use of interestingness scripts to decide whether the changeset is good or bad."""
     conditionScript = ximport.importRelativeOrAbsolute(interestingness[0])
     conditionArgPrefix = interestingness[1:]
 
@@ -337,7 +331,6 @@ def externalTestAndLabel(options, interestingness):
 
 def checkBlameParents(repoDir, blamedRev, blamedGoodOrBad, labels, testRev, startRepo, endRepo):
     """If bisect blamed a merge, try to figure out why."""
-
     bisectLied = False
     missedCommonAncestor = False
 
@@ -350,25 +343,24 @@ def checkBlameParents(repoDir, blamedRev, blamedGoodOrBad, labels, testRev, star
     for p in parents:
         # Ensure we actually tested the parent.
         if labels.get(p) is None:
-            print ""
-            print ("Oops! We didn't test rev %s, a parent of the blamed revision! " +
-                   "Let's do that now.") % str(p)
+            print()
+            print("Oops! We didn't test rev %s, a parent of the blamed revision! Let's do that now." % p)
             if not hgCmds.isAncestor(repoDir, startRepo, p) and \
                     not hgCmds.isAncestor(repoDir, endRepo, p):
-                print ('We did not test rev %s because it is not a descendant of either ' +
-                       '%s or %s.') % (str(p), startRepo, endRepo)
+                print("We did not test rev %s because it is not a descendant of either %s or %s." % (
+                    p, startRepo, endRepo))
                 # Note this in case we later decide the bisect result is wrong.
                 missedCommonAncestor = True
             label = testRev(p)
             labels[p] = label
-            print label[0] + " (" + label[1] + ") "
-            print "As expected, the parent's label is the opposite of the blamed rev's label."
+            print("%s (%s) " % (label[0], label[1]))
+            print("As expected, the parent's label is the opposite of the blamed rev's label.")
 
         # Check that the parent's label is the opposite of the blamed merge's label.
         if labels[p][0] == "skip":
-            print "Parent rev %s was marked as 'skip', so the regression window includes it." % str(p)
+            print("Parent rev %s was marked as 'skip', so the regression window includes it." % (p,))
         elif labels[p][0] == blamedGoodOrBad:
-            print "Bisect lied to us! Parent rev %s was also %s!" % (str(p), blamedGoodOrBad)
+            print("Bisect lied to us! Parent rev %s was also %s!" % (p, blamedGoodOrBad))
             bisectLied = True
         else:
             assert labels[p][0] == {'good': 'bad', 'bad': 'good'}[blamedGoodOrBad]
@@ -377,27 +369,27 @@ def checkBlameParents(repoDir, blamedRev, blamedGoodOrBad, labels, testRev, star
     if bisectLied:
         if missedCommonAncestor:
             ca = hgCmds.findCommonAncestor(repoDir, parents[0], parents[1])
-            print ""
-            print "Bisect blamed the merge because our initial range did not include one"
-            print "of the parents."
-            print "The common ancestor of %s and %s is %s." % (parents[0], parents[1], ca)
+            print()
+            print("Bisect blamed the merge because our initial range did not include one")
+            print("of the parents.")
+            print("The common ancestor of %s and %s is %s." % (parents[0], parents[1], ca))
             label = testRev(ca)
-            print label[0] + " (" + label[1] + ") "
-            print "Consider re-running autoBisect with -s %s -e %s" % (ca, blamedRev)
-            print "in a configuration where earliestWorking is before the common ancestor."
+            print("%s (%s) " % (label[0], label[1]))
+            print("Consider re-running autoBisect with -s %s -e %s" % (ca, blamedRev))
+            print("in a configuration where earliestWorking is before the common ancestor.")
         else:
-            print ""
-            print "Most likely, bisect's result was unhelpful because one of the"
-            print "tested revisions was marked as 'good' or 'bad' for the wrong reason."
-            print "I don't know which revision was incorrectly marked. Sorry."
+            print()
+            print("Most likely, bisect's result was unhelpful because one of the")
+            print("tested revisions was marked as 'good' or 'bad' for the wrong reason.")
+            print("I don't know which revision was incorrectly marked. Sorry.")
     else:
-        print ""
-        print "The bug was introduced by a merge (it was not present on either parent)."
-        print "I don't know which patches from each side of the merge contributed to the bug. Sorry."
+        print()
+        print("The bug was introduced by a merge (it was not present on either parent).")
+        print("I don't know which patches from each side of the merge contributed to the bug. Sorry.")
 
 
 def sanitizeCsetMsg(msg, repo):
-    '''Sanitizes changeset messages, removing email addresses.'''
+    """Sanitize changeset messages, removing email addresses."""
     msgList = msg.split('\n')
     sanitizedMsgList = []
     for line in msgList:
@@ -410,22 +402,29 @@ def sanitizeCsetMsg(msg, repo):
 
 
 def bisectLabel(hgPrefix, options, hgLabel, currRev, startRepo, endRepo):
-    '''Tell hg what we learned about the revision.'''
+    """Tell hg what we learned about the revision."""
     assert hgLabel in ("good", "bad", "skip")
     outputResult = sps.captureStdout(hgPrefix + ['bisect', '-U', '--' + hgLabel, currRev])[0]
     outputLines = outputResult.split("\n")
 
-    repoDir = options.buildOptions.repoDir if options.buildOptions else options.browserOptions.repoDir
+    if options.buildOptions:
+        repoDir = options.buildOptions.repoDir
 
     if re.compile("Due to skipped revisions, the first (good|bad) revision could be any of:").match(outputLines[0]):
-        print '\n' + sanitizeCsetMsg(outputResult, repoDir) + '\n'
+        print()
+        print(sanitizeCsetMsg(outputResult, repoDir))
+        print()
         return None, None, None, startRepo, endRepo
 
     r = re.compile("The first (good|bad) revision is:")
     m = r.match(outputLines[0])
     if m:
-        print '\n\nautoBisect shows this is probably related to the following changeset:\n'
-        print sanitizeCsetMsg(outputResult, repoDir) + '\n'
+        print()
+        print()
+        print("autoBisect shows this is probably related to the following changeset:")
+        print()
+        print(sanitizeCsetMsg(outputResult, repoDir))
+        print()
         blamedGoodOrBad = m.group(1)
         blamedRev = hgCmds.getCsetHashFromBisectMsg(outputLines[1])
         return blamedGoodOrBad, blamedRev, None, startRepo, endRepo
@@ -438,7 +437,7 @@ def bisectLabel(hgPrefix, options, hgLabel, currRev, startRepo, endRepo):
 
     currRev = hgCmds.getCsetHashFromBisectMsg(outputLines[0])
     if currRev is None:
-        print 'Resetting to default revision...'
+        print("Resetting to default revision...")
         subprocess.check_call(hgPrefix + ['update', '-C', 'default'])
         hgCmds.destroyPyc(repoDir)
         raise Exception("hg did not suggest a changeset to test!")
@@ -462,16 +461,14 @@ def bisectLabel(hgPrefix, options, hgLabel, currRev, startRepo, endRepo):
 
 
 def assertSaneJsBinary(cacheF):
-    '''
-    If the cache folder is present, check that the js binary is working properly.
-    '''
+    """If the cache folder is present, check that the js binary is working properly."""
     if os.path.isdir(cacheF):
         fList = os.listdir(cacheF)
         if 'build' in fList:
             if INCOMPLETE_NOTE in fList:
-                print cacheF + ' has subdirectories: ' + str(fList)
-                raise Exception('Downloaded binaries and incompleteBuild.txt should not both be ' +
-                                'present together in this directory.')
+                print("%s has subdirectories: %s" % (cacheF, fList))
+                raise Exception("Downloaded binaries and incompleteBuild.txt should not both be "
+                                "present together in this directory.")
             assert os.path.isdir(sps.normExpUserPath(os.path.join(cacheF, 'build', 'download')))
             assert os.path.isdir(sps.normExpUserPath(os.path.join(cacheF, 'build', 'dist')))
             assert os.path.isfile(sps.normExpUserPath(os.path.join(cacheF, 'build', 'dist',
@@ -496,8 +493,7 @@ def assertSaneJsBinary(cacheF):
                     raise Exception('Non-zero return code: ' + str(retCode))
                 return True  # Binary is working correctly
             except (OSError, IOError):
-                raise Exception('Cache folder ' + cacheF + ' is corrupt, please delete it ' +
-                                'and try again.')
+                raise Exception("Cache folder %s is corrupt, please delete it and try again." % cacheF)
         elif INCOMPLETE_NOTE in fList:
             return True
         else:
@@ -507,9 +503,7 @@ def assertSaneJsBinary(cacheF):
 
 
 def bisectUsingTboxBins(options):
-    '''
-    Downloads treeherder binaries and bisects them.
-    '''
+    """Download treeherder binaries and bisect them."""
     testedIDs = {}
     desiredArch = '32' if options.buildOptions.enable32 else '64'
     buildType = downloadBuild.defaultBuildType(options.nameOfTreeherderBranch, desiredArch, options.buildOptions.enableDbg)
@@ -518,44 +512,49 @@ def bisectUsingTboxBins(options):
     urlsTbox = downloadBuild.getBuildList(buildType, earliestBuild=options.startRepo, latestBuild=options.endRepo)
 
     # Download and test starting point.
-    print '\nExamining starting point...'
-    sID, startResult, sReason, sPosition, urlsTbox, testedIDs, startSkippedNum = testBuildOrNeighbour(
+    print()
+    print("Examining starting point...")
+    sID, startResult, _sReason, _sPosition, urlsTbox, testedIDs, _startSkippedNum = testBuildOrNeighbour(
         options, 0, urlsTbox, buildType, testedIDs)
     if sID is None:
         raise Exception('No complete builds were found.')
-    print 'Numeric ID ' + sID + ' was tested.'
+    print("Numeric ID %s was tested." % sID)
 
     # Download and test ending point.
-    print '\nExamining ending point...'
-    eID, endResult, eReason, ePosition, urlsTbox, testedIDs, endSkippedNum = testBuildOrNeighbour(
+    print()
+    print("Examining ending point...")
+    eID, endResult, _eReason, _ePosition, urlsTbox, testedIDs, _endSkippedNum = testBuildOrNeighbour(
         options, len(urlsTbox) - 1, urlsTbox, buildType, testedIDs)
     if eID is None:
         raise Exception('No complete builds were found.')
-    print 'Numeric ID ' + eID + ' was tested.'
+    print("Numeric ID %s was tested." % eID)
 
     if startResult == endResult:
         raise Exception('Starting and ending points should have opposite results')
 
     count = 0
-    print '\nStarting bisection...\n'
+    print()
+    print("Starting bisection...")
+    print()
     while count < MAX_ITERATIONS:
         sps.vdump('Unsorted dictionary of tested IDs is: ' + str(testedIDs))
         count += 1
-        print 'Test number ' + str(count) + ':'
+        print("Test number %d:" % count)
 
         sortedUrlsTbox = sorted(urlsTbox)
         if len(sortedUrlsTbox) >= 3:
             mPosition = len(sortedUrlsTbox) // 2
         else:
-            print '\nWARNING: ' + str(sortedUrlsTbox) + ' has size smaller than 3. ' + \
-                'Impossible to return "middle" element.\n'
+            print()
+            print('WARNING: %s has size smaller than 3. Impossible to return "middle" element.' % (sortedUrlsTbox,))
+            print()
             mPosition = len(sortedUrlsTbox)
 
         # Test the middle revision. If it is not a complete build, test ones around it.
-        mID, mResult, mReason, mPosition, urlsTbox, testedIDs, middleRevSkippedNum = testBuildOrNeighbour(
+        mID, mResult, _mReason, mPosition, urlsTbox, testedIDs, middleRevSkippedNum = testBuildOrNeighbour(
             options, mPosition, urlsTbox, buildType, testedIDs)
         if mID is None:
-            print 'Middle ID is None.'
+            print("Middle ID is None.")
             break
 
         # Refresh the range of treeherder IDs depending on mResult.
@@ -564,21 +563,21 @@ def bisectUsingTboxBins(options):
         else:
             urlsTbox = urlsTbox[(mPosition):len(urlsTbox)]
 
-        print 'Numeric ID ' + mID + ' was tested.',
+        print("Numeric ID %s was tested." % mID, end="")
 
         #  Exit infinite loop once we have tested the starting point, ending point and any points
         #  in the middle with results returning "incomplete".
         if (len(urlsTbox) - middleRevSkippedNum) <= 2 and mID in testedIDs:
             break
         elif len(urlsTbox) < 2:
-            print 'urlsTbox is: ' + str(urlsTbox)
+            print("urlsTbox is: %s" % (urlsTbox,))
             raise Exception('Length of urlsTbox should not be smaller than 2.')
         elif (len(testedIDs) - 2) > 30:
             raise Exception('Number of testedIDs has exceeded 30.')
 
-        print showRemainingNumOfTests(urlsTbox)
+        print(showRemainingNumOfTests(urlsTbox))
 
-    print
+    print()
     sps.vdump('Build URLs are: ' + str(urlsTbox))
     assert getIdFromTboxUrl(urlsTbox[0]) in testedIDs, 'Starting ID should have been tested.'
     assert getIdFromTboxUrl(urlsTbox[-1]) in testedIDs, 'Ending ID should have been tested.'
@@ -586,10 +585,10 @@ def bisectUsingTboxBins(options):
 
 
 def createTboxCacheFolder(cacheFolder):
-    '''
-    Attempt to create the treeherder js shell's cache folder if it does not exist. If it does, check
-    that its binaries are working properly.
-    '''
+    """Attempt to create the treeherder js shell's cache folder if it does not exist.
+
+    If it does, check that its binaries are working properly.
+    """
     try:
         os.mkdir(cacheFolder)
     except OSError:
@@ -603,9 +602,7 @@ def createTboxCacheFolder(cacheFolder):
 
 
 def ensureCacheDirHasCorrectIdNum(cacheFolder):
-    '''
-    Ensures that the cache folder is named with the correct numeric ID.
-    '''
+    """Ensure that the cache folder is named with the correct numeric ID."""
     srcUrlPath = sps.normExpUserPath(os.path.join(cacheFolder, 'build', 'download', 'source-url.txt'))
     if os.path.isfile(srcUrlPath):
         with open(srcUrlPath, 'rb') as f:
@@ -615,16 +612,15 @@ def ensureCacheDirHasCorrectIdNum(cacheFolder):
         idNumSourceUrl = fContents[0].split('/')[-2]
 
         if idNumFolderName != idNumSourceUrl:
-            print '\nWARNING: Numeric ID in folder name (current value: ' + \
-                idNumFolderName + ') is not equal to the numeric ID from source URL ' + \
-                '(current value: ' + idNumSourceUrl + ')\n'
+            print()
+            print("WARNING: Numeric ID in folder name (current value: %s) is not equal to "
+                  "the numeric ID from source URL (current value: %s)" % (idNumFolderName, idNumSourceUrl))
+            print()
             raise Exception('Folder name numeric ID not equal to source URL numeric ID.')
 
 
 def getBuildOrNeighbour(isJsShell, preferredIndex, urls, buildType):
-    '''
-    Downloads a build. If the build is incomplete, find a working neighbour, then return results.
-    '''
+    """Download a build. If the build is incomplete, find a working neighbour, then return results."""
     offset = None
     skippedChangesetNum = 0
 
@@ -632,13 +628,13 @@ def getBuildOrNeighbour(isJsShell, preferredIndex, urls, buildType):
         if offset is None:
             offset = 0
         elif offset > 16:
-            print 'Failed to find a working build after ~30 tries.'
-            return None, None, None
+            print("Failed to find a working build after ~30 tries.")
+            return None, None, None, None
         elif offset > 0:
             # Stop once we are testing beyond the start & end entries of the list
             if (preferredIndex + offset >= len(urls)) and (preferredIndex - offset < 0):
-                print 'Stop looping because everything within the range was tested.'
-                return None, None, None
+                print("Stop looping because everything within the range was tested.")
+                return None, None, None, None
             offset = -offset
         else:
             offset = -offset + 1  # Alternate between positive and negative offsets
@@ -676,7 +672,7 @@ def getBuildOrNeighbour(isJsShell, preferredIndex, urls, buildType):
 
 
 def getHgwebMozillaOrg(branchName):
-    '''Returns the hgweb link of the respository, given a treeherder branch name.'''
+    """Return the hgweb link of the repository, given a treeherder branch name."""
     hgWebAddrList = ['hg.mozilla.org']
     if branchName == 'mozilla-central':
         hgWebAddrList.append(branchName)
@@ -691,17 +687,12 @@ def getHgwebMozillaOrg(branchName):
 
 
 def getIdFromTboxUrl(url):
-    '''
-    Returns the numeric ID from the treeherder URL at:
-        https://ftp.mozilla.org/pub/mozilla.org/firefox/treeherder-builds/
-    '''
+    """Return numeric ID from treeherder at https://archive.mozilla.org/pub/mozilla.org/firefox/treeherder-builds/ ."""
     return filter(None, url.split('/'))[-1]
 
 
 def getOneBuild(isJsShell, url, buildType):
-    '''
-    Try to get a complete working build.
-    '''
+    """Try to get a complete working build."""
     idNum = getIdFromTboxUrl(url)
     tboxCacheFolder = sps.normExpUserPath(os.path.join(compileShell.ensureCacheDir(),
                                                        'tboxjs-' + buildType + '-' + idNum))
@@ -728,19 +719,15 @@ def getOneBuild(isJsShell, url, buildType):
 
 
 def getTboxJsBinPath(baseDir):
-    '''
-    Returns the path to the treeherder js binary from a download folder.
-    '''
+    """Return the path to the treeherder js binary from a download folder."""
     return sps.normExpUserPath(os.path.join(baseDir, 'build', 'dist', 'js.exe' if sps.isWin else 'js'))
 
 
 def getTimestampAndHashFromTboxFiles(folder):
-    '''
-    Returns timestamp and changeset information from the .txt file downloaded from treeherder.
-    '''
+    """Return timestamp and changeset information from the .txt file downloaded from treeherder."""
     downloadDir = sps.normExpUserPath(os.path.join(folder, 'build', 'download'))
     for fn in os.listdir(downloadDir):
-        if fn.startswith('firefox-') and fn.endswith('.txt'):
+        if fn.startswith('firefox-') and fn.endswith('.txt') and '_info' not in fn:
             with open(os.path.join(downloadDir, fn), 'rb') as f:
                 fContents = f.read().splitlines()
             break
@@ -749,30 +736,27 @@ def getTimestampAndHashFromTboxFiles(folder):
 
 
 def isTboxBinInteresting(options, downloadDir, csetHash):
-    '''
-    Test the required treeherder binary.
-    '''
+    """Test the required treeherder binary."""
     return options.testAndLabel(getTboxJsBinPath(downloadDir), csetHash)
 
 
 def outputTboxBisectionResults(options, interestingList, testedBuildsDict):
-    '''
-    Returns formatted bisection results from using treeherder builds.
-    '''
-    sTimestamp, sHash, sResult, sReason = testedBuildsDict[getIdFromTboxUrl(interestingList[0])]
-    eTimestamp, eHash, eResult, eReason = testedBuildsDict[getIdFromTboxUrl(interestingList[-1])]
+    """Return formatted bisection results from using treeherder builds."""
+    sTimestamp, sHash, sResult, _sReason = testedBuildsDict[getIdFromTboxUrl(interestingList[0])]
+    eTimestamp, eHash, eResult, _eReason = testedBuildsDict[getIdFromTboxUrl(interestingList[-1])]
 
-    print '\nParameters for compilation bisection:'
+    print()
+    print("Parameters for compilation bisection:")
     pOutput = '-p "' + options.parameters + '"' if options.parameters != '-e 42' else ''
     oOutput = '-o "' + options.output + '"' if options.output is not '' else ''
     params = filter(None, ['-s ' + sHash, '-e ' + eHash, pOutput, oOutput, '-b <build parameters>'])
-    print ' '.join(params)
+    print(" ".join(params))
 
-    print '\n=== Treeherder Build Bisection Results by autoBisect ===\n'
-    print 'The "' + sResult + '" changeset has the timestamp "' + sTimestamp + \
-        '" and the hash "' + sHash + '".'
-    print 'The "' + eResult + '" changeset has the timestamp "' + eTimestamp + \
-        '" and the hash "' + eHash + '".'
+    print()
+    print("=== Treeherder Build Bisection Results by autoBisect ===")
+    print()
+    print('The "%s" changeset has the timestamp "%s" and the hash "%s".' % (sResult, sTimestamp, sHash))
+    print('The "%s" changeset has the timestamp "%s" and the hash "%s".' % (eResult, eTimestamp, eHash))
 
     # Are we describing a regression window or a fix window?
     if sResult == 'good' and eResult == 'bad':
@@ -780,30 +764,29 @@ def outputTboxBisectionResults(options, interestingList, testedBuildsDict):
     elif sResult == 'bad' and eResult == 'good':
         windowType = 'fix'
     else:
-        raise Exception('Unknown windowType because starting result is "' + sResult + '" and ' +
-                        'ending result is "' + eResult + '".')
+        raise Exception('Unknown windowType because starting result is "%s" and ending result is "%s".' % (
+            sResult, eResult))
 
     # Show an hgweb link
     pushlogWindow = getHgwebMozillaOrg(options.nameOfTreeherderBranch) + '/pushloghtml?fromchange=' + sHash + '&tochange=' + eHash
-    print '\nLikely ' + windowType + ' window: ' + pushlogWindow + '\n'
+    print()
+    print("Likely %s window: %s" % (windowType, pushlogWindow))
+    print()
 
 
 def readIncompleteBuildTxtFile(txtFile, idNum):
-    '''
-    Reads the INCOMPLETE_NOTE text file indicating that this particular build is incomplete.
-    '''
+    """Read the INCOMPLETE_NOTE text file indicating that this particular build is incomplete."""
     with open(txtFile, 'rb') as f:
         contentsF = f.read()
         if 'is incomplete.' not in contentsF:
-            print 'Contents of ' + txtFile + ' is: ' + repr(contentsF)
+            print("Contents of %s is: %r" % (txtFile, contentsF))
             raise Exception('Invalid ' + INCOMPLETE_NOTE + ' file contents.')
         else:
-            print 'Examined build with numeric ID ' + idNum + ' to be incomplete. ' + \
-                'Trying another build...'
+            print("Examined build with numeric ID %s to be incomplete. Trying another build..." % idNum)
 
 
 def rmOldLocalCachedDirs(cacheDir):
-    '''Removes old local cached directories, which were created four weeks ago.'''
+    """Remove old local cached directories, which were created four weeks ago."""
     # This is in autoBisect because it has a lock so we do not race while removing directories
     # Adapted from http://stackoverflow.com/a/11337407
     SECONDS_IN_A_DAY = 24 * 60 * 60
@@ -826,9 +809,7 @@ def rmOldLocalCachedDirs(cacheDir):
 
 
 def showRemainingNumOfTests(reqList):
-    '''
-    Display the approximate number of tests remaining.
-    '''
+    """Display the approximate number of tests remaining."""
     remainingTests = int(math.ceil(math.log(len(reqList), 2))) - 1
     wordTest = 'tests'
     if remainingTests == 1:
@@ -837,9 +818,7 @@ def showRemainingNumOfTests(reqList):
 
 
 def testBuildOrNeighbour(options, preferredIndex, urls, buildType, testedIDs):
-    '''
-    Tests the build. If the build is incomplete, find a working neighbour, then return results.
-    '''
+    """Test the build. If the build is incomplete, find a working neighbour, then return results."""
     finalIndex, idNum, tboxCacheFolder, skippedNum = getBuildOrNeighbour(
         (not options.browserOptions), preferredIndex, urls, buildType
     )
@@ -847,15 +826,15 @@ def testBuildOrNeighbour(options, preferredIndex, urls, buildType, testedIDs):
     if idNum is None:
         result, reason = None, None
     elif idNum in testedIDs.keys():
-        print 'Retrieving previous test result: ',
+        print("Retrieving previous test result: ", end="")
         result, reason = testedIDs[idNum][2:4]
     else:
         # The build has not been tested before, so test it.
         testedIDs[idNum] = getTimestampAndHashFromTboxFiles(tboxCacheFolder)
-        print 'Found binary in: ' + tboxCacheFolder
-        print 'Testing binary...',
+        print("Found binary in: %s" % tboxCacheFolder)
+        print("Testing binary...", end="")
         result, reason = isTboxBinInteresting(options, tboxCacheFolder, testedIDs[idNum][1])
-        print 'Result: ' + result + ' - ' + reason
+        print("Result: %s - %s" % (result, reason))
         # Adds the result and reason to testedIDs
         testedIDs[idNum] = list(testedIDs[idNum]) + [result, reason]
 
@@ -863,9 +842,7 @@ def testBuildOrNeighbour(options, preferredIndex, urls, buildType, testedIDs):
 
 
 def writeIncompleteBuildTxtFile(url, cacheFolder, txtFile, num):
-    '''
-    Writes a text file indicating that this particular build is incomplete.
-    '''
+    """Write a text file indicating that this particular build is incomplete."""
     if os.path.isdir(sps.normExpUserPath(os.path.join(cacheFolder, 'build', 'dist'))) or \
             os.path.isdir(sps.normExpUserPath(os.path.join(cacheFolder, 'build', 'download'))):
         sps.rmTreeIncludingReadOnly(sps.normExpUserPath(os.path.join(cacheFolder, 'build')))
@@ -874,12 +851,12 @@ def writeIncompleteBuildTxtFile(url, cacheFolder, txtFile, num):
         f.write('This build with numeric ID ' + num + ' is incomplete.')
     assert num == getIdFromTboxUrl(url), 'The numeric ID ' + num + \
         ' has to be the one we downloaded from ' + url
-    print 'Wrote a text file that indicates numeric ID ' + num + ' has an incomplete build.'
+    print("Wrote a text file that indicates numeric ID %s has an incomplete build." % num)
     return False  # False indicates that this text file has not yet been looked at.
 
 
 def main():
-    '''Prevent running two instances of autoBisectJs concurrently - we don't want to confuse hg.'''
+    """Prevent running two instances of autoBisectJs concurrently - we don't want to confuse hg."""
     options = parseOpts()
 
     repoDir = options.buildOptions.repoDir if options.buildOptions else options.browserOptions.repoDir
@@ -890,10 +867,7 @@ def main():
             bisectUsingTboxBins(options)
         else:
             # Bisect using local builds
-            if options.browserOptions:
-                findBlamedCset(options, repoDir,
-                               buildBrowser.makeTestRev(options))
-            else:
+            if not options.browserOptions:
                 findBlamedCset(options, repoDir,
                                compileShell.makeTestRev(options))
 

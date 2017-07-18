@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=invalid-name,line-too-long,missing-docstring,wrong-import-position
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this file,
-# You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
 
 import os
 import shutil
@@ -15,7 +19,7 @@ import subprocesses as sps
 
 isBoto = False
 # We need to first install boto into MozillaBuild via psbootstrap on Windows
-if not (sps.isMac or sps.isWin):
+if not sps.isMac:
     try:
         from boto.s3.connection import S3Connection, Key
         import boto.exception
@@ -26,15 +30,14 @@ if not (sps.isMac or sps.isWin):
 
 
 def isEC2VM():
-    '''Tests to see if the specified S3 cache is available.'''
+    """Test to see if the specified S3 cache is available."""
     if sps.isMac or not isBoto:
         return False
 
-    if not sps.isWin:  # We need to first install boto into MozillaBuild via psbootstrap on Windows
-        try:
-            return bool(boto.utils.get_instance_metadata(num_retries=1, timeout=1)['instance-id'])
-        except KeyError:
-            return False
+    try:
+        return bool(boto.utils.get_instance_metadata(num_retries=1, timeout=1)['instance-id'])
+    except KeyError:
+        return False
 
 
 class S3Cache(object):
@@ -43,7 +46,7 @@ class S3Cache(object):
         self.bucket_name = bucket_name
 
     def connect(self):
-        '''Connects to the S3 bucket.'''
+        """Connect to the S3 bucket."""
         if not isBoto:
             return False
 
@@ -53,36 +56,42 @@ class S3Cache(object):
             self.bucket = conn.get_bucket(self.bucket_name)
             return True
         except boto.provider.ProfileNotFoundError:
-            print 'Unable to connect via boto using profile name "%s" in ~/.boto' % EC2_PROFILE
+            print('Unable to connect via boto using profile name "%s" in ~/.boto' % EC2_PROFILE)
             return False
         except boto.exception.S3ResponseError:
-            print 'Unable to connect to the following bucket "%s", please check your credentials.' % self.bucket_name
+            print('Unable to connect to the following bucket "%s", please check your credentials.' % self.bucket_name)
             return False
 
     def downloadFile(self, origin, dest):
-        '''Downloads files from S3.'''
+        """Download files from S3."""
         key = self.bucket.get_key(origin)
         if key is not None:
             key.get_contents_to_filename(dest)
-            print 'Finished downloading.'
+            print("Finished downloading.")
             return True
-        else:
-            return False
+        return False
 
     def compressAndUploadDirTarball(self, directory, tarball_path):
-        '''This function compresses a directory into a bz2 tarball and uploads it to S3.'''
-        print 'Creating archive...'
+        """Compress a directory into a bz2 tarball and upload it to S3."""
+        print("Creating archive...")
         shutil.make_archive(directory, 'bztar', directory)
         self.uploadFileToS3(tarball_path)
-        os.remove(tarball_path)
 
     def uploadFileToS3(self, filename):
-        '''Uploads file to S3.'''
+        """Upload file to S3."""
         destDir = ''  # Root folder of the S3 bucket
         destpath = os.path.join(destDir, os.path.basename(filename))
-        print 'Uploading %s to Amazon S3 bucket %s' % (filename, self.bucket_name)
+        print("Uploading %s to Amazon S3 bucket %s" % (filename, self.bucket_name))
 
         k = Key(self.bucket)
         k.key = destpath
         k.set_contents_from_filename(filename, reduced_redundancy=True)
-        print  # This newline is needed to get the path of the compiled binary printed on a newline.
+
+    def uploadStrToS3(self, destDir, filename, contents):
+        """Upload a string to an S3 file."""
+        print("Uploading %s to Amazon S3 bucket %s" % (filename, self.bucket_name))
+
+        k2 = Key(self.bucket)
+        k2.key = os.path.join(destDir, filename)
+        k2.set_contents_from_string(contents, reduced_redundancy=True)
+        print()  # This newline is needed to get the path of the compiled binary printed on a newline.

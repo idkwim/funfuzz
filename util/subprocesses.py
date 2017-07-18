@@ -1,8 +1,12 @@
 #!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=dangerous-default-value,invalid-name,line-too-long,missing-docstring,no-else-return,old-style-class,too-few-public-methods,too-many-arguments,too-many-branches,too-many-statements
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this file,
-# You can obtain one at http://mozilla.org/MPL/2.0/.
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
 
 import ctypes
 import errno
@@ -21,20 +25,26 @@ isARMv7l = (platform.uname()[4] == 'armv7l')
 isLinux = (platform.system() == 'Linux')
 isMac = (platform.system() == 'Darwin')
 isWin = (platform.system() == 'Windows')
+isWin10 = isWin and (platform.uname()[2] == '10')
 isWin64 = ('PROGRAMFILES(X86)' in os.environ)
 # Note that sys.getwindowsversion will be inaccurate from Win8+ onwards: http://stackoverflow.com/q/19128219
-isWinVistaOrHigher = isWin and (sys.getwindowsversion()[0] >= 6)
+isWinVistaOrHigher = isWin and (sys.getwindowsversion()[0] >= 6)  # pylint: disable=no-member
+isMozBuild64 = False
 # This refers to the Win-specific "MozillaBuild" environment in which Python is running, which is
 # spawned from the MozillaBuild script for 64-bit compilers, e.g. start-msvc10-x64.bat
-isMozBuild64 = isWin and '64' in os.environ['MOZ_MSVCBITS']  # For MozillaBuild 2.0.0
+if os.environ.get('MOZ_MSVCBITS'):
+    isMozBuild64 = isWin and '64' in os.environ['MOZ_MSVCBITS']  # For MozillaBuild 2.0.0 onwards
+elif os.environ.get('MOZ_TOOLS'):
+    isMozBuild64 = (os.name == 'nt') and ('x64' in os.environ['MOZ_TOOLS'].split(os.sep)[-1])  # For MozillaBuild 1.x
+# else do not set; the script is running stand-alone and the isMozBuild64 variable should not be needed.
 
-noMinidumpMsg = r'''
+noMinidumpMsg = r"""
 WARNING: Minidumps are not being generated, so all crashes will be uninteresting.
 WARNING: Make sure the following key value exists in this key:
 WARNING: HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps
 WARNING: Name: DumpType  Type: REG_DWORD
 WARNING: http://msdn.microsoft.com/en-us/library/windows/desktop/bb787181%28v=vs.85%29.aspx
-'''
+"""
 
 ########################
 #  Platform Detection  #
@@ -42,18 +52,13 @@ WARNING: http://msdn.microsoft.com/en-us/library/windows/desktop/bb787181%28v=vs
 
 
 def macVer():
-    '''
-    If system is a Mac, return the mac type.
-    '''
+    """If system is a Mac, return the mac type."""
     assert platform.system() == 'Darwin'
     return [int(x) for x in platform.mac_ver()[0].split('.')]
 
 
 def getFreeSpace(folder, mulVar):
-    '''
-    Return folder/drive free space in bytes if mulVar is 0.
-    Adapted from http://stackoverflow.com/a/2372171
-    '''
+    """Return folder/drive free space in bytes if mulVar is 0. Adapted from http://stackoverflow.com/a/2372171 ."""
     assert mulVar >= 0
     if platform.system() == 'Windows':
         free_bytes = ctypes.c_ulonglong(0)
@@ -62,7 +67,7 @@ def getFreeSpace(folder, mulVar):
     else:
         retVal = float(os.statvfs(folder).f_bfree * os.statvfs(folder).f_frsize)
 
-    return retVal / (1024 ** mulVar)
+    return retVal // (1024 ** mulVar)
 
 
 #####################
@@ -72,9 +77,7 @@ def getFreeSpace(folder, mulVar):
 
 def captureStdout(inputCmd, ignoreStderr=False, combineStderr=False, ignoreExitCode=False,
                   currWorkingDir=os.getcwdu(), env='NOTSET', verbosity=False):
-    '''
-    Captures standard output, returns the output as a string, along with the return value.
-    '''
+    """Capture standard output, return the output as a string, along with the return value."""
     if env == 'NOTSET':
         vdump(shellify(inputCmd))
         env = os.environ
@@ -113,13 +116,13 @@ def captureStdout(inputCmd, ignoreStderr=False, combineStderr=False, ignoreExitC
             # can appear even though a shell compiled successfully.
             # Pymake in builds earlier than revision 232553f741a0 did not support the '-s' option.
             if 'no such option: -s' not in stdout:
-                print 'Nonzero exit code from: '
-                print '  ' + shellify(cmd)
-                print 'stdout is:'
-                print stdout
+                print("Nonzero exit code from: ")
+                print("  %s" % shellify(cmd))
+                print("stdout is:")
+                print(stdout)
             if stderr is not None:
-                print 'stderr is:'
-                print stderr
+                print("stderr is:")
+                print(stderr)
             # Pymake in builds earlier than revision 232553f741a0 did not support the '-s' option.
             if 'hg pull: option --rebase not recognized' not in stdout and 'no such option: -s' not in stdout:
                 if isWin and stderr and 'Permission denied' in stderr and \
@@ -128,29 +131,29 @@ def captureStdout(inputCmd, ignoreStderr=False, combineStderr=False, ignoreExitC
                     raise Exception('Windows conftest.exe configuration permission problem')
                 else:
                     raise Exception('Nonzero exit code')
-    if not combineStderr and not ignoreStderr and len(stderr) > 0:
+    if not combineStderr and not ignoreStderr and stderr:
         # Ignore hg color mode throwing an error in console on Windows platforms.
         if not (isWin and 'warning: failed to set color mode to win32' in stderr):
-            print 'Unexpected output on stderr from: '
-            print '  ' + shellify(cmd)
-            print stdout, stderr
+            print("Unexpected output on stderr from: ")
+            print("  %s" % shellify(cmd))
+            print("%s %s" % (stdout, stderr))
             raise Exception('Unexpected output on stderr')
-    if stderr and ignoreStderr and len(stderr) > 0 and p.returncode != 0:
+    if stderr and ignoreStderr and stderr and p.returncode != 0:
         # During configure, there will always be stderr. Sometimes this stderr causes configure to
         # stop the entire script, especially on Windows.
-        print 'Return code not zero, and unexpected output on stderr from: '
-        print '  ' + shellify(cmd)
-        print stdout, stderr
+        print("Return code not zero, and unexpected output on stderr from: ")
+        print("  %s" % shellify(cmd))
+        print("%s %s" % (stdout, stderr))
         raise Exception('Return code not zero, and unexpected output on stderr')
     if verbose or verbosity:
-        print stdout
+        print(stdout)
         if stderr is not None:
-            print stderr
+            print(stderr)
     return stdout.rstrip(), p.returncode
 
 
 def createWtmpDir(tmpDirBase):
-    '''Create wtmp<number> directory, incrementing the number if one is already found.'''
+    """Create wtmp<number> directory, incrementing the number if one is already found."""
     i = 1
     while True:
         tmpDirWithNum = 'wtmp' + str(i)
@@ -165,7 +168,7 @@ def createWtmpDir(tmpDirBase):
 
 
 def dateStr():
-    '''Equivalent of running `date` in bash, excluding the timezone.'''
+    """Equivalent of running `date` in bash, excluding the timezone."""
     # Try not to add the timezone. Python does not seem to be accurate about DST switchovers.
     # assert captureStdout(['date'])[0] == currDateTime # This fails on Windows
     # On Windows, there is a leading zero in the day of the date in time.asctime()
@@ -173,7 +176,7 @@ def dateStr():
 
 
 def disableCorefile():
-    '''When called as a preexec_fn, sets appropriate resource limits for the JS shell. Must only be called on POSIX.'''
+    """When called as a preexec_fn, sets appropriate resource limits for the JS shell. Must only be called on POSIX."""
     import resource  # module only available on POSIX
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
@@ -184,7 +187,7 @@ def getCoreLimit():
 
 
 def grabMacCrashLog(progname, crashedPID, logPrefix, useLogFiles):
-    '''Finds the required crash log in the given crash reporter directory.'''
+    """Find the required crash log in the given crash reporter directory."""
     assert platform.system() == 'Darwin' and macVer() >= [10, 6]
     reportDirList = [os.path.expanduser('~'), '/']
     for baseDir in reportDirList:
@@ -221,7 +224,7 @@ def grabMacCrashLog(progname, crashedPID, logPrefix, useLogFiles):
                         return logPrefix + "-crash.txt"
                     else:
                         return fullfn
-                        #return open(fullfn).read()
+                        # return open(fullfn).read()
 
             except (OSError, IOError):
                 # Maybe the log was rotated out between when we got the list
@@ -232,7 +235,7 @@ def grabMacCrashLog(progname, crashedPID, logPrefix, useLogFiles):
 
 
 def grabCrashLog(progfullname, crashedPID, logPrefix, wantStack):
-    '''Returns the crash log if found.'''
+    """Return the crash log if found."""
     progname = os.path.basename(progfullname)
 
     useLogFiles = isinstance(logPrefix, str)
@@ -265,23 +268,24 @@ def grabCrashLog(progfullname, crashedPID, logPrefix, wantStack):
             # It would be nice to use this everywhere, but it seems to be broken on Windows
             # (http://docs.python.org/library/subprocess.html)
             close_fds=(os.name == "posix"),
-            preexec_fn=(disableCorefile if os.name == 'posix' else None)  # Do not generate a corefile if gdb crashes
+            preexec_fn=(disableCorefile if isLinux else None)  # Do not generate a corefile if gdb crashes in Linux
         )
         if debuggerExitCode != 0:
-            print 'Debugger exited with code %d : %s' % (debuggerExitCode, shellify(debuggerCmd))
+            print("Debugger exited with code %d : %s" % (debuggerExitCode, shellify(debuggerCmd)))
         if useLogFiles:
-            shutil.move(coreFile, logPrefix + "-core")
-            subprocess.call(["gzip", '-f', logPrefix + "-core"])
-            # chmod here, else the uploaded -core.gz files do not have sufficient permissions.
-            subprocess.check_call(['chmod', 'og+r', logPrefix + "-core.gz"])
+            if os.path.isfile(coreFile):
+                shutil.move(coreFile, logPrefix + "-core")
+                subprocess.call(["gzip", '-f', logPrefix + "-core"])
+                # chmod here, else the uploaded -core.gz files do not have sufficient permissions.
+                subprocess.check_call(['chmod', 'og+r', logPrefix + "-core.gz"])
             return logPrefix + "-crash.txt"
         else:
-            print "I don't know what to do with a core file when logPrefix is null"
+            print("I don't know what to do with a core file when logPrefix is null")
 
     # On Mac, look for a crash log generated by Mac OS X Crash Reporter
     elif isMac:
         loops = 0
-        maxLoops = 500 if progname.startswith("firefox") else 30
+        maxLoops = 500 if progname.startswith("firefox") else 450
         while True:
             cLogFound = grabMacCrashLog(progname, crashedPID, logPrefix, useLogFiles)
             if cLogFound is not None:
@@ -293,28 +297,31 @@ def grabCrashLog(progfullname, crashedPID, logPrefix, wantStack):
             if loops > maxLoops:
                 # I suppose this might happen if the process corrupts itself so much that
                 # the crash reporter gets confused about the process name, for example.
-                print "grabCrashLog waited a long time, but a crash log for " + progname + \
-                    " [" + str(crashedPID) + "] never appeared!"
+                print("grabCrashLog waited a long time, but a crash log for %s [%s] never appeared!" % (
+                    progname, crashedPID))
                 break
 
     elif isLinux:
-        print "Warning: grabCrashLog() did not find a core file for PID %d." % crashedPID
-        print "Note: Your soft limit for core file sizes is currently %d. You can increase it with 'ulimit -c' in bash." % getCoreLimit()[0]
+        print("Warning: grabCrashLog() did not find a core file for PID %d." % crashedPID)
+        print("Note: Your soft limit for core file sizes is currently %d. "
+              "You can increase it with 'ulimit -c' in bash." % getCoreLimit()[0])
 
 
 def constructCdbCommand(progfullname, crashedPID):
-    '''
-    Constructs a command that uses the Windows debugger (cdb.exe) to turn a minidump file into a
-    stack trace.
-    '''
+    """Construct a command that uses the Windows debugger (cdb.exe) to turn a minidump file into a stack trace."""
     # On Windows Vista and above, look for a minidump.
     dumpFilename = normExpUserPath(os.path.join(
         '~', 'AppData', 'Local', 'CrashDumps', os.path.basename(progfullname) + '.' + str(crashedPID) + '.dmp'))
-    win64bitDebuggerFolder = os.path.join(os.getenv('PROGRAMW6432'), 'Debugging Tools for Windows (x64)')
+    if isWin10:
+        win64bitDebuggerFolder = os.path.join(os.getenv('PROGRAMFILES(X86)'), 'Windows Kits', '10', 'Debuggers', 'x64')
+    else:
+        win64bitDebuggerFolder = os.path.join(os.getenv('PROGRAMW6432'), 'Debugging Tools for Windows (x64)')
     # 64-bit cdb.exe seems to also be able to analyse 32-bit binary dumps.
     cdbPath = os.path.join(win64bitDebuggerFolder, 'cdb.exe')
     if not os.path.exists(cdbPath):
-        print '\nWARNING: cdb.exe is not found - all crashes will be interesting.\n'
+        print()
+        print("WARNING: cdb.exe is not found - all crashes will be interesting.")
+        print()
         return None
 
     if isWinDumpingToDefaultLocation():
@@ -326,9 +333,6 @@ def constructCdbCommand(progfullname, crashedPID):
                 assert os.path.exists(debuggerCmdPath)
 
                 cdbCmdList = []
-                bExploitableDLL = os.path.join(win64bitDebuggerFolder, 'winext', 'msec.dll')
-                if os.path.exists(bExploitableDLL):
-                    cdbCmdList.append('.load ' + bExploitableDLL)
                 cdbCmdList.append('$<' + debuggerCmdPath)
 
                 # See bug 902706 about -g.
@@ -338,45 +342,50 @@ def constructCdbCommand(progfullname, crashedPID):
             loops += 1
             if loops > maxLoops:
                 # Windows may take some time to generate the dump.
-                print "constructCdbCommand waited a long time, but " + dumpFilename + " never appeared!"
+                print("constructCdbCommand waited a long time, but %s never appeared!" % dumpFilename)
                 return None
     else:
         return None
 
 
 def isWinDumpingToDefaultLocation():
-    '''Checks whether Windows minidumps are enabled and set to go to Windows' default location.'''
-    import _winreg
+    """Check whether Windows minidumps are enabled and set to go to Windows' default location."""
+    if sys.version_info.major == 2:
+        import _winreg as winreg  # pylint: disable=import-error
+    else:
+        import winreg  # pylint: disable=import-error
     # For now, this code does not edit the Windows Registry because we tend to be in a 32-bit
     # version of Python and if one types in regedit in the Run dialog, opens up the 64-bit registry.
     # If writing a key, we most likely need to flush. For the moment, no keys are written.
     try:
-        with _winreg.OpenKey(_winreg.ConnectRegistry(None, _winreg.HKEY_LOCAL_MACHINE),
-                             r'Software\Microsoft\Windows\Windows Error Reporting\LocalDumps',
-                             # Read key from 64-bit registry, which also works for 32-bit
-                             0, (_winreg.KEY_WOW64_64KEY + _winreg.KEY_READ)) as key:
+        with winreg.OpenKey(winreg.ConnectRegistry(None, winreg.HKEY_LOCAL_MACHINE),
+                            r"Software\Microsoft\Windows\Windows Error Reporting\LocalDumps",
+                            # Read key from 64-bit registry, which also works for 32-bit
+                            0, (winreg.KEY_WOW64_64KEY + winreg.KEY_READ)) as key:
 
             try:
-                dumpTypeRegValue = _winreg.QueryValueEx(key, 'DumpType')
-                if not (dumpTypeRegValue[0] == 1 and dumpTypeRegValue[1] == _winreg.REG_DWORD):
-                    print noMinidumpMsg
+                dumpTypeRegValue = winreg.QueryValueEx(key, "DumpType")
+                if not (dumpTypeRegValue[0] == 1 and dumpTypeRegValue[1] == winreg.REG_DWORD):
+                    print(noMinidumpMsg)
                     return False
-            except WindowsError as e:
+            except WindowsError as e:  # pylint: disable=undefined-variable
                 if e.errno == 2:
-                    print noMinidumpMsg
+                    print(noMinidumpMsg)
                     return False
                 else:
                     raise
 
             try:
-                dumpFolderRegValue = _winreg.QueryValueEx(key, 'DumpFolder')
+                dumpFolderRegValue = winreg.QueryValueEx(key, "DumpFolder")
                 # %LOCALAPPDATA%\CrashDumps is the default location.
-                if not (dumpFolderRegValue[0] == '%LOCALAPPDATA%\CrashDumps' and
-                        dumpFolderRegValue[1] == _winreg.REG_EXPAND_SZ):
-                    print '\nWARNING: Dumps are instead appearing at: ' + dumpFolderRegValue[0] + \
-                        ' - all crashes will be uninteresting.\n'
+                if not (dumpFolderRegValue[0] == r'%LOCALAPPDATA%\CrashDumps' and
+                        dumpFolderRegValue[1] == winreg.REG_EXPAND_SZ):
+                    print()
+                    print("WARNING: Dumps are instead appearing at: %s - "
+                          "all crashes will be uninteresting." % dumpFolderRegValue[0])
+                    print()
                     return False
-            except WindowsError as e:
+            except WindowsError as e:  # pylint: disable=undefined-variable
                 # If the key value cannot be found, the dumps will be put in the default location
                 if e.errno == 2 and e.strerror == 'The system cannot find the file specified':
                     return True
@@ -384,21 +393,20 @@ def isWinDumpingToDefaultLocation():
                     raise
 
         return True
-    except WindowsError as e:
+    except WindowsError as e:  # pylint: disable=undefined-variable
         # If the LocalDumps registry key cannot be found, dumps will be put in the default location.
         if e.errno == 2 and e.strerror == 'The system cannot find the file specified':
-            print '\nWARNING: The registry key HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\' + \
-                'Windows\\Windows Error Reporting\\LocalDumps cannot be found.\n'
+            print()
+            print("WARNING: The registry key HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\"
+                  "Windows\\Windows Error Reporting\\LocalDumps cannot be found.")
+            print()
             return None
         else:
             raise
 
 
 def constructGdbCommand(progfullname, crashedPID):
-    '''
-    Constructs a command that uses the POSIX debugger (gdb) to turn a minidump file into a
-    stack trace.
-    '''
+    """Construct a command that uses the POSIX debugger (gdb) to turn a minidump file into a stack trace."""
     # On Mac and Linux, look for a core file.
     coreFilename = None
     if isMac:
@@ -427,25 +435,25 @@ def constructGdbCommand(progfullname, crashedPID):
 
 
 def getAbsPathForAdjacentFile(filename):
-    '''Gets the absolute path of a particular file, given its base directory and filename.'''
+    """Get the absolute path of a particular file, given its base directory and filename."""
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
 
 
 def isProgramInstalled(program):
-    '''Checks if the specified program is installed.'''
+    """Check if the specified program is installed."""
     whichExit = captureStdout(['which', program], ignoreStderr=True, combineStderr=True, ignoreExitCode=True)[1]
     return whichExit == 0
 
 
 def rmDirIfEmpty(eDir):
-    '''Remove directory if empty.'''
+    """Remove directory if empty."""
     assert os.path.isdir(eDir)
     if not os.listdir(eDir):
         os.rmdir(eDir)
 
 
 def rmTreeIfExists(dirTree):
-    '''Remove a directory with all sub-directories and files if the directory exists.'''
+    """Remove a directory with all sub-directories and files if the directory exists."""
     if os.path.isdir(dirTree):
         rmTreeIncludingReadOnly(dirTree)
     assert not os.path.isdir(dirTree)
@@ -456,7 +464,7 @@ def rmTreeIncludingReadOnly(dirTree):
 
 
 def test_rmTreeIncludingReadOnly():
-    '''Run this function in the same directory as subprocesses.py to test.'''
+    """Run this function in the same directory as subprocesses.py to test."""
     testDir = 'test_rmTreeIncludingReadOnly'
     os.mkdir(testDir)
     readOnlyDir = os.path.join(testDir, 'nestedReadOnlyDir')
@@ -472,7 +480,7 @@ def test_rmTreeIncludingReadOnly():
 
 
 def handleRemoveReadOnly(func, path, exc):
-    '''Handle read-only files. Adapted from http://stackoverflow.com/q/1213706'''
+    """Handle read-only files. Adapted from http://stackoverflow.com/q/1213706 ."""
     if func in (os.rmdir, os.remove) and exc[1].errno == errno.EACCES:
         if os.name == 'posix':
             # Ensure parent directory is also writeable.
@@ -509,22 +517,24 @@ def shellify(cmd):
 
 def timeSubprocess(command, ignoreStderr=False, combineStderr=False, ignoreExitCode=False,
                    cwd=os.getcwdu(), env=os.environ, vb=False):
-    '''
-    Calculates how long a captureStdout command takes and prints it. Returns the stdout and return
-    value that captureStdout passes on.
-    '''
-    print 'Running `%s` now..' % shellify(command)
+    """
+    Calculate how long a captureStdout command takes and prints it.
+
+    Return the stdout and return value that captureStdout passes on.
+    """
+    print("Running `%s` now.." % shellify(command))
     startTime = time.time()
     stdOutput, retVal = captureStdout(command, ignoreStderr=ignoreStderr,
                                       combineStderr=combineStderr, ignoreExitCode=ignoreExitCode,
                                       currWorkingDir=cwd, env=env, verbosity=vb)
     endTime = time.time()
-    print '`' + shellify(command) + '` took %.3f seconds.\n' % (endTime - startTime)
+    print("`%s` took %.3f seconds." % (shellify(command), endTime - startTime))
+    print()
     return stdOutput, retVal
 
 
 class Unbuffered:
-    '''From http://stackoverflow.com/a/107717 - Unbuffered stdout by default, similar to -u.'''
+    """From http://stackoverflow.com/a/107717 - Unbuffered stdout by default, similar to -u."""
 
     def __init__(self, stream):
         self.stream = stream
@@ -538,11 +548,14 @@ class Unbuffered:
 
 
 def vdump(inp):
-    '''
-    This function appends the word 'DEBUG' to any verbose output.
-    '''
+    """Append the word 'DEBUG' to any verbose output."""
     if verbose:
-        print 'DEBUG -', inp
+        print("DEBUG - %s" % inp)
+
+
+def verCheck(prog):
+    """Runs the program with --version and returns the result."""
+    return subprocess.check_output([prog, '--version'])
 
 
 ###########

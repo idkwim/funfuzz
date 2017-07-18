@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=fixme,import-error,invalid-name,missing-docstring,too-many-branches,too-many-return-statements,wrong-import-position
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
+
 import argparse
 import hashlib
 import os
@@ -37,16 +47,16 @@ class Randomizer(object):
 
 
 def addParserOptions():
-    '''Adds parser options.'''
+    """Add parser options."""
     # Where to find the source dir and compiler, patching if necessary.
     parser = argparse.ArgumentParser(description="Usage: Don't use this directly")
     randomizer = Randomizer()
 
     def randomizeBool(name, fastDeviceWeight, slowDeviceWeight, **kwargs):
-        '''
-        Adds a randomized boolean option that defaults to False,
-        and has a [weight] chance of being changed to True when using --random.
-        '''
+        """Add a randomized boolean option that defaults to False.
+
+        Option also has a [weight] chance of being changed to True when using --random.
+        """
         randomizer.add(name[-1], fastDeviceWeight, slowDeviceWeight)
         parser.add_argument(*name, action='store_true', default=False, **kwargs)
 
@@ -57,7 +67,6 @@ def addParserOptions():
                         help='Chooses sensible random build options. Defaults to "%(default)s".')
     parser.add_argument('-R', '--repoDir',
                         dest='repoDir',
-                        default=sps.normExpUserPath(os.path.join('~', 'trees', 'mozilla-central')),
                         help='Sets the source repository.')
     parser.add_argument('-P', '--patch',
                         dest='patchFile',
@@ -69,28 +78,38 @@ def addParserOptions():
                   help='Build 32-bit shells, but if not enabled, 64-bit shells are built.')
     randomizeBool(['--enable-debug'], 0.5, 0.5,
                   dest='enableDbg',
-                  help='Build shells with --enable-debug. Defaults to "%(default)s".')
-    randomizeBool(['--disable-debug'], 0, 0,  # Already default in configure.in
+                  help="Build shells with --enable-debug. Defaults to '%(default)s'. "
+                       "Currently defaults to True in configure.in on mozilla-central.")
+    randomizeBool(['--disable-debug'], 0, 0,
                   dest='disableDbg',
-                  help='Build shells with --disable-debug. Defaults to "%(default)s".')
-    randomizeBool(['--enable-optimize'], 0, 0,  # Already default in configure.in
+                  help="Build shells with --disable-debug. Defaults to '%(default)s'. "
+                       "Currently defaults to True in configure.in on mozilla-central.")
+    randomizeBool(['--enable-optimize'], 0, 0,
                   dest='enableOpt',
                   help='Build shells with --enable-optimize. Defaults to "%(default)s".')
     randomizeBool(['--disable-optimize'], 0.1, 0.01,
                   dest='disableOpt',
                   help='Build shells with --disable-optimize. Defaults to "%(default)s".')
-    randomizeBool(['--enable-profiling'], 0.5, 0,
+    randomizeBool(['--enable-profiling'], 0, 0,
                   dest='enableProfiling',
-                  help='Build shells with --enable-profiling. Defaults to "%(default)s".')
+                  help="Build shells with --enable-profiling. Defaults to '%(default)s'. "
+                       "Currently defaults to True in configure.in on mozilla-central.")
+    randomizeBool(['--disable-profiling'], 0.5, 0,
+                  dest='disableProfiling',
+                  help='Build with profiling off. Defaults to "True" on Linux, else "%(default)s".')
 
+    # Alternative compiler for Linux and Windows. Clang is always turned on, on Macs.
+    randomizeBool(['--build-with-clang'], 0.5, 0.5,
+                  dest='buildWithClang',
+                  help='Build with clang. Defaults to "True" on Macs, "%(default)s" otherwise.')
     # Memory debuggers
     randomizeBool(['--build-with-asan'], 0.3, 0,
                   dest='buildWithAsan',
                   help='Build with clang AddressSanitizer support. Defaults to "%(default)s".')
     randomizeBool(['--build-with-valgrind'], 0.2, 0.05,
                   dest='buildWithVg',
-                  help='Build with valgrind.h bits. Defaults to "%(default)s". ' +
-                  'Requires --enable-hardfp for ARM platforms.')
+                  help="Build with valgrind.h bits. Defaults to '%(default)s'. "
+                       "Requires --enable-hardfp for ARM platforms.")
     # We do not use randomizeBool because we add this flag automatically if --build-with-valgrind
     # is selected.
     parser.add_argument('--run-with-valgrind',
@@ -104,32 +123,59 @@ def addParserOptions():
         randomizeBool(['--enable-hardfp'], 0.1, 0.1,
                       dest='enableHardFp',
                       help='Build hardfp shells (ARM-specific setting). Defaults to "%(default)s".')
-    randomizeBool(['--enable-nspr-build'], 0.5, 0.99,
-                  dest='enableNsprBuild',
-                  help='Build the shell using (in-tree) NSPR. This is the default on Windows. ' +
-                  'On POSIX platforms, shells default to --enable-posix-nspr-emulation. ' +
-                  'Using --enable-nspr-build creates a JS shell that is more like the browser. ' +
-                  'Defaults to "%(default)s".')
     randomizeBool(['--enable-more-deterministic'], 0.75, 0.5,
                   dest='enableMoreDeterministic',
                   help='Build shells with --enable-more-deterministic. Defaults to "%(default)s".')
+    parser.add_argument('--enable-oom-breakpoint',  # Extra debugging help for OOM assertions
+                        dest='enableOomBreakpoint',
+                        action='store_true',
+                        default=False,
+                        help="Build shells with --enable-oom-breakpoint. Defaults to '%(default)s'.")
+    parser.add_argument('--without-intl-api',  # Speeds up compilation but is non-default
+                        dest='enableWithoutIntlApi',
+                        action='store_true',
+                        default=False,
+                        help="Build shells using --without-intl-api. Defaults to '%(default)s'.")
     randomizeBool(['--enable-simulator=arm'], 0.3, 0,
                   dest='enableSimulatorArm32',
-                  help='Build shells with --enable-simulator=arm, only applicable to 32-bit shells. ' +
-                  'Defaults to "%(default)s".')
+                  help="Build shells with --enable-simulator=arm, only applicable to 32-bit shells. "
+                       "Defaults to '%(default)s'.")
     randomizeBool(['--enable-simulator=arm64'], 0.3, 0,
                   dest='enableSimulatorArm64',
-                  help='Build shells with --enable-simulator=arm64, only applicable to 64-bit shells. ' +
-                  'Defaults to "%(default)s".')
+                  help="Build shells with --enable-simulator=arm64, only applicable to 64-bit shells. "
+                       "Defaults to '%(default)s'.")
+    parser.add_argument('--enable-arm-simulator',
+                        dest='enableArmSimulatorObsolete',
+                        action='store_true',
+                        default=False,
+                        help="Build the shell using --enable-arm-simulator for legacy purposes. "
+                             "This flag is obsolete and is the equivalent of --enable-simulator=arm, "
+                             "use --enable-simulator=[arm|arm64] instead. Defaults to '%(default)s'.")
+
+    # If adding a new compile option, be mindful of repository randomization.
+    # e.g. it may be in mozilla-central but not in mozilla-beta
 
     return parser, randomizer
 
 
 def parseShellOptions(inputArgs):
-    """Returns a 'buildOptions' object, which is intended to be immutable."""
-
+    """Return a 'buildOptions' object, which is intended to be immutable."""
     parser, randomizer = addParserOptions()
     buildOptions = parser.parse_args(inputArgs.split())
+
+    if sps.isMac:
+        buildOptions.buildWithClang = True  # Clang seems to be the only supported compiler
+
+    if buildOptions.enableArmSimulatorObsolete:
+        buildOptions.enableSimulatorArm32 = True
+
+    if buildOptions.enableRandom:
+        buildOptions = generateRandomConfigurations(parser, randomizer)
+    else:
+        buildOptions.buildOptionsStr = inputArgs
+        valid = areArgsValid(buildOptions)
+        if not valid[0]:
+            print("WARNING: This set of build options is not tested well because: %s" % valid[1])
 
     # Ensures releng machines do not enter the if block and assumes mozilla-central always exists
     if os.path.isdir(DEFAULT_TREES_LOCATION):
@@ -149,19 +195,11 @@ def parseShellOptions(inputArgs):
             buildOptions.patchFile = sps.normExpUserPath(buildOptions.patchFile)
             assert os.path.isfile(buildOptions.patchFile)
 
-    if buildOptions.enableRandom:
-        buildOptions = generateRandomConfigurations(parser, randomizer)
-    else:
-        buildOptions.buildOptionsStr = inputArgs
-        valid = areArgsValid(buildOptions)
-        if not valid[0]:
-            print 'WARNING: This set of build options is not tested well because: ' + valid[1]
-
     return buildOptions
 
 
 def computeShellType(buildOptions):
-    '''Returns configuration information of the shell.'''
+    """Return configuration information of the shell."""
     fileName = ['js']
     if buildOptions.enableDbg:
         fileName.append('dbg')
@@ -170,14 +208,20 @@ def computeShellType(buildOptions):
     fileName.append('32' if buildOptions.enable32 else '64')
     if buildOptions.enableProfiling:
         fileName.append('prof')
+    if buildOptions.disableProfiling:
+        fileName.append('profDisabled')
     if buildOptions.enableMoreDeterministic:
         fileName.append('dm')
+    if buildOptions.buildWithClang:
+        fileName.append('clang')
     if buildOptions.buildWithAsan:
         fileName.append('asan')
     if buildOptions.buildWithVg:
         fileName.append('vg')
-    if buildOptions.enableNsprBuild:
-        fileName.append('nsprBuild')
+    if buildOptions.enableOomBreakpoint:
+        fileName.append('oombp')
+    if buildOptions.enableWithoutIntlApi:
+        fileName.append('intlDisabled')
     if buildOptions.enableSimulatorArm32 or buildOptions.enableSimulatorArm64:
         fileName.append('armSim')
     if sps.isARMv7l:
@@ -195,12 +239,12 @@ def computeShellType(buildOptions):
 
 
 def computeShellName(buildOptions, buildRev):
-    '''Returns the shell type together with the build revision.'''
+    """Return the shell type together with the build revision."""
     return computeShellType(buildOptions) + '-' + buildRev
 
 
 def areArgsValid(args):
-    '''Checks to see if chosen arguments are valid.'''
+    """Check to see if chosen arguments are valid."""
     if args.enableDbg and args.disableDbg:
         return False, 'Making a debug, non-debug build would be contradictory.'
     if args.enableOpt and args.disableOpt:
@@ -211,15 +255,19 @@ def areArgsValid(args):
         return False, '64-bit ARM builds are not yet supported.'
 
     if sps.isWin and (args.enable32 == sps.isMozBuild64):
-        return False, 'Win32 builds need the 32-bit MozillaBuild batch file and likewise the ' + \
-            'corresponding 64-bit ones for Win64 builds.'
+        return False, ("Win32 builds need the 32-bit MozillaBuild batch file and likewise the "
+                       "corresponding 64-bit ones for Win64 builds.")
 
     if args.buildWithVg:
         return False, 'FIXME: We need to set LD_LIBRARY_PATH first, else Valgrind segfaults.'
+        # Test with leak-checking disabled, test that reporting works, test only on x64 16.04
+        # Test with bug 1278887
+        # Also ensure we are running autoBisect w/Valgrind having the --error-exitcode=?? flag
         # Uncomment the following when we unbreak Valgrind fuzzing.
         # if not sps.isProgramInstalled('valgrind'):
         #     return False, 'Valgrind is not installed.'
         # if not args.enableOpt:
+        #     # FIXME: Isn't this enabled by default??
         #     return False, 'Valgrind needs opt builds.'
         # if args.buildWithAsan:
         #     return False, 'One should not compile with both Valgrind flags and ASan flags.'
@@ -229,19 +277,29 @@ def areArgsValid(args):
         # if sps.isMac:
         #     return False, 'Valgrind does not work well with Mac OS X 10.10 Yosemite.'
         # if sps.isARMv7l and not args.enableHardFp:
-        #     return False, 'libc6-dbg packages needed for Valgrind are only ' + \
-        #         'available via hardfp, tested on Ubuntu on an ARM odroid board.'
+        #     return False, ("libc6-dbg packages needed for Valgrind are only "
+        #                    "available via hardfp, tested on Ubuntu on an ARM odroid board.")
 
     if args.runWithVg and not args.buildWithVg:
         return False, '--run-with-valgrind needs --build-with-valgrind.'
 
+    if args.buildWithClang:
+        if sps.isLinux and not args.buildWithAsan:
+            return False, 'We do not really care about non-Asan clang-compiled Linux builds yet.'
+        if sps.isWin:
+            return False, 'Clang builds on Windows are not supported well yet.'
+
     if args.buildWithAsan:
+        if not args.buildWithClang:
+            return False, 'We should test ASan builds that are only compiled with Clang.'
         # Also check for determinism to prevent LLVM compilation from happening on releng machines,
         # since releng machines only test non-deterministic builds.
         if not args.enableMoreDeterministic:
             return False, 'We should test deterministic ASan builds.'
-        if sps.isLinux:
-            return False, 'FIXME: Figure out why compiling with Asan does not work in this harness.'
+        if sps.isLinux:  # https://github.com/MozillaSecurity/funfuzz/issues/25
+            return False, 'Linux ASan builds cannot yet submit to FuzzManager.'
+        if sps.isMac:  # https://github.com/MozillaSecurity/funfuzz/issues/25
+            return False, 'Mac ASan builds cannot yet submit to FuzzManager.'
         if sps.isWin:
             return False, 'Asan is not yet supported on Windows.'
 
@@ -268,42 +326,40 @@ def generateRandomConfigurations(parser, randomizer):
         buildOptions = parser.parse_args(randomArgs)
         if areArgsValid(buildOptions)[0]:
             buildOptions.buildOptionsStr = ' '.join(randomArgs)  # Used for autoBisect
+            buildOptions.enableRandom = True  # This has to be true since we are randomizing...
             return buildOptions
 
 
 def getRandomValidRepo(treeLocation):
     validRepos = []
-    for repo in ['mozilla-central', 'mozilla-aurora', 'mozilla-beta', 'mozilla-release',
-                 'mozilla-esr31']:
+    for repo in ['mozilla-central', 'mozilla-beta']:
         if os.path.isfile(sps.normExpUserPath(os.path.join(
                 treeLocation, repo, '.hg', 'hgrc'))):
             validRepos.append(repo)
 
     # After checking if repos are valid, reduce chances that non-mozilla-central repos are chosen
-    if 'mozilla-aurora' in validRepos and chance(0.4):
-        validRepos.remove('mozilla-aurora')
-    if 'mozilla-beta' in validRepos and chance(0.7):
+    if 'mozilla-beta' in validRepos and chance(0.5):
         validRepos.remove('mozilla-beta')
-    if 'mozilla-release' in validRepos and chance(0.9):
-        validRepos.remove('mozilla-release')
-    if 'mozilla-esr31' in validRepos and chance(0.8):
-        validRepos.remove('mozilla-esr31')
 
-    validRepos = ['mozilla-central']  # FIXME: Let's set to random configurations within m-c for now
     return os.path.realpath(sps.normExpUserPath(
         os.path.join(treeLocation, random.choice(validRepos))))
 
 
 def main():
-    print 'Here are some sample random build configurations that can be generated:'
+    print("Here are some sample random build configurations that can be generated:")
     parser, randomizer = addParserOptions()
     buildOptions = parser.parse_args()
 
+    if buildOptions.enableArmSimulatorObsolete:
+        buildOptions.enableSimulatorArm32 = True
+
     for _ in range(30):
         buildOptions = generateRandomConfigurations(parser, randomizer)
-        print buildOptions.buildOptionsStr
+        print(buildOptions.buildOptionsStr)
 
-    print "\nRunning this file directly doesn't do anything, but here's our subparser help:\n"
+    print()
+    print("Running this file directly doesn't do anything, but here's our subparser help:")
+    print()
     parseShellOptions("--help")
 
 

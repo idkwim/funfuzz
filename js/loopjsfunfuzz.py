@@ -1,11 +1,19 @@
 #!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=fixme,import-error,invalid-name,line-too-long,missing-docstring,no-member,too-many-branches,too-many-locals,too-many-statements,unused-argument,wrong-import-position
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
 
 import json
 import os
 import subprocess
 import sys
 import time
-from optparse import OptionParser
+from optparse import OptionParser  # pylint: disable=deprecated-module
 
 import compareJIT
 import jsInteresting
@@ -16,8 +24,8 @@ p0 = os.path.dirname(os.path.abspath(__file__))
 interestingpy = os.path.abspath(os.path.join(p0, 'jsInteresting.py'))
 p1 = os.path.abspath(os.path.join(p0, os.pardir, 'util'))
 sys.path.append(p1)
+import createCollector
 import fileManipulation
-import inspectShell
 import lithOps
 import linkJS
 import subprocesses as sps
@@ -49,7 +57,7 @@ def parseOpts(args):
     options, args = parser.parse_args(args)
 
     if options.valgrind and options.useCompareJIT:
-        print "Note: When running comparejit, the --valgrind option will be ignored"
+        print("Note: When running comparejit, the --valgrind option will be ignored")
 
     # kill js shell if it runs this long.
     # jsfunfuzz will quit after half this time if it's not ilooping.
@@ -57,12 +65,8 @@ def parseOpts(args):
     # lower = less time wasted in timeouts and in compareJIT testcases that are thrown away due to OOMs.
     options.timeout = int(args[0])
 
-    options.knownPath = os.path.expanduser(args[1])
-    # FIXME: findIgnoreLists.py should probably check this automatically.
-    reposWithKnownLists = ['mozilla-central', 'mozilla-esr31', 'ionmonkey', 'jscore', 'v8']
-    if options.knownPath not in reposWithKnownLists:
-        sps.vdump('Known bugs for the ' + options.knownPath + ' repository does not exist. Using the list for mozilla-central instead.')
-        options.knownPath = 'mozilla-central'
+    # FIXME: We can probably remove args[1]
+    options.knownPath = 'mozilla-central'
     options.jsEngine = args[2]
     options.engineFlags = args[3:]
 
@@ -74,11 +78,11 @@ def showtail(filename):
     cmd = []
     cmd.extend(['tail', '-n', '20'])
     cmd.append(filename)
-    print ' '.join(cmd)
-    print
+    print(" ".join(cmd))
+    print()
     subprocess.check_call(cmd)
-    print
-    print
+    print()
+    print()
 
 
 def linkFuzzer(target_fn, repo, prologue):
@@ -87,46 +91,39 @@ def linkFuzzer(target_fn, repo, prologue):
     linkJS.linkJS(target_fn, file_list_fn, source_base, prologue)
 
 
-def makeRegressionTestPrologue(repo, regressionTestListFile):
-    """Generate a JS string to tell jsfunfuzz where to find SpiderMonkey's regression tests"""
+def makeRegressionTestPrologue(repo):
+    """Generate a JS string to tell jsfunfuzz where to find SpiderMonkey's regression tests."""
+    repo = sps.normExpUserPath(repo) + os.sep
 
-    # We use json.dumps to escape strings (Windows paths have backslashes).
     return """
-        const regressionTestsRoot = %s;
-        const libdir = regressionTestsRoot + %s; // needed by jit-tests
-        var regressionTestList;
-        try { regressionTestList = read(%s).match(/.+/g); } catch(e) { }
-    """ % (
-        json.dumps(sps.normExpUserPath(repo) + os.sep),
-        json.dumps(os.path.join('js', 'src', 'jit-test', 'lib') + os.sep),
-        json.dumps(os.path.abspath(sps.normExpUserPath(regressionTestListFile))),
-    )
+const regressionTestsRoot = %s;
+const libdir = regressionTestsRoot + %s; // needed by jit-tests
+const regressionTestList = %s;
+""" % (json.dumps(repo),
+       json.dumps(os.path.join('js', 'src', 'jit-test', 'lib') + os.sep),
+       json.dumps(inTreeRegressionTests(repo)))
 
 
 def inTreeRegressionTests(repo):
-    jitTests = jsFilesIn(os.path.join(repo, 'js', 'src', 'jit-test', 'tests'))
-    jsTests = jsFilesIn(os.path.join(repo, 'js', 'src', 'tests'))
+    jitTests = jsFilesIn(len(repo), os.path.join(repo, 'js', 'src', 'jit-test', 'tests'))
+    jsTests = jsFilesIn(len(repo), os.path.join(repo, 'js', 'src', 'tests'))
     return jitTests + jsTests
 
 
-def jsFilesIn(root):
-    return [os.path.join(path, filename)
-            for path, dirs, files in os.walk(sps.normExpUserPath(root))
+def jsFilesIn(repoPathLength, root):
+    return [os.path.join(path, filename)[repoPathLength:]
+            for path, _dirs, files in os.walk(sps.normExpUserPath(root))
             for filename in files
             if filename.endswith('.js')]
 
 
-def many_timed_runs(targetTime, wtmpDir, args):
+def many_timed_runs(targetTime, wtmpDir, args, collector):
     options = parseOpts(args)
     engineFlags = options.engineFlags  # engineFlags is overwritten later if --random-flags is set.
     startTime = time.time()
 
     if os.path.isdir(sps.normExpUserPath(options.repo)):
-        regressionTestListFile = sps.normExpUserPath(os.path.join(wtmpDir, "regression-tests.list"))
-        with open(regressionTestListFile, "wb") as f:
-            for fn in inTreeRegressionTests(options.repo):
-                f.write(fn + "\n")
-        regressionTestPrologue = makeRegressionTestPrologue(options.repo, regressionTestListFile)
+        regressionTestPrologue = makeRegressionTestPrologue(options.repo)
     else:
         regressionTestPrologue = ""
 
@@ -136,11 +133,11 @@ def many_timed_runs(targetTime, wtmpDir, args):
     iteration = 0
     while True:
         if targetTime and time.time() > startTime + targetTime:
-            print "Out of time!"
+            print("Out of time!")
             os.remove(fuzzjs)
-            if len(os.listdir(wtmpDir)) == 0:
+            if not os.listdir(wtmpDir):
                 os.rmdir(wtmpDir)
-            return (lithOps.HAPPY, None)
+            break
 
         # Construct command needed to loop jsfunfuzz fuzzing.
         jsInterestingArgs = []
@@ -152,25 +149,25 @@ def many_timed_runs(targetTime, wtmpDir, args):
         if options.randomFlags:
             engineFlags = shellFlags.randomFlagSet(options.jsEngine)
             jsInterestingArgs.extend(engineFlags)
-        jsInterestingArgs.extend(['-e', 'maxRunTime=' + str(options.timeout*(1000/2))])
+        jsInterestingArgs.extend(['-e', 'maxRunTime=' + str(options.timeout * (1000 / 2))])
         jsInterestingArgs.extend(['-f', fuzzjs])
-        jsunhappyOptions = jsInteresting.parseOptions(jsInterestingArgs)
+        jsInterestingOptions = jsInteresting.parseOptions(jsInterestingArgs)
 
         iteration += 1
         logPrefix = sps.normExpUserPath(os.path.join(wtmpDir, "w" + str(iteration)))
 
-        level = jsInteresting.jsfunfuzzLevel(jsunhappyOptions, logPrefix)
+        res = jsInteresting.ShellResult(jsInterestingOptions, jsInterestingOptions.jsengineWithArgs, logPrefix, False)
 
-        if level != jsInteresting.JS_FINE:
+        if res.lev != jsInteresting.JS_FINE:
             showtail(logPrefix + "-out.txt")
             showtail(logPrefix + "-err.txt")
 
-            # splice jsfunfuzz.js with `grep FRC wN-out`
+            # splice jsfunfuzz.js with `grep "/*FRC-" wN-out`
             filenameToReduce = logPrefix + "-reduced.js"
             [before, after] = fileManipulation.fuzzSplice(fuzzjs)
 
             with open(logPrefix + '-out.txt', 'rb') as f:
-                newfileLines = before + [l.replace('/*FRC*/', '') for l in fileManipulation.linesStartingWith(f, "/*FRC*/")] + after
+                newfileLines = before + [l.replace('/*FRC-', '/*') for l in fileManipulation.linesStartingWith(f, "/*FRC-")] + after
             fileManipulation.writeLinesToFile(newfileLines, logPrefix + "-orig.js")
             fileManipulation.writeLinesToFile(newfileLines, filenameToReduce)
 
@@ -178,43 +175,64 @@ def many_timed_runs(targetTime, wtmpDir, args):
             itest = [interestingpy]
             if options.valgrind:
                 itest.append("--valgrind")
-            itest.append("--minlevel=" + str(level))
+            itest.append("--minlevel=" + str(res.lev))
             itest.append("--timeout=" + str(options.timeout))
             itest.append(options.knownPath)
-            (lithResult, lithDetails) = pinpoint.pinpoint(itest, logPrefix, options.jsEngine, engineFlags, filenameToReduce,
-                                                          options.repo, options.buildOptionsStr, targetTime, level)
-            if targetTime:
-                return (lithResult, lithDetails)
+            (lithResult, _lithDetails, autoBisectLog) = pinpoint.pinpoint(itest, logPrefix, options.jsEngine, engineFlags, filenameToReduce,
+                                                                          options.repo, options.buildOptionsStr, targetTime, res.lev)
+
+            # Upload with final output
+            if lithResult == lithOps.LITH_FINISHED:
+                fargs = jsInterestingOptions.jsengineWithArgs[:-1] + [filenameToReduce]
+                retestResult = jsInteresting.ShellResult(jsInterestingOptions, fargs, logPrefix + "-final", False)
+                if retestResult.lev > jsInteresting.JS_FINE:
+                    res = retestResult
+                    quality = 0
+                else:
+                    quality = 6
+            else:
+                quality = 10
+
+            # ddsize = lithOps.ddsize(filenameToReduce)
+            print("Submitting %s (quality=%s) at %s" % (filenameToReduce, quality, sps.dateStr()))
+
+            metadata = {}
+            if autoBisectLog:
+                metadata = {"autoBisectLog": ''.join(autoBisectLog)}
+            collector.submit(res.crashInfo, filenameToReduce, quality, metaData=metadata)
+            print("Submitted %s" % filenameToReduce)
 
         else:
-            shellIsDeterministic = inspectShell.queryBuildConfiguration(options.jsEngine, 'more-deterministic')
             flagsAreDeterministic = "--dump-bytecode" not in engineFlags and '-D' not in engineFlags
-            if options.useCompareJIT and level == jsInteresting.JS_FINE and \
-                    shellIsDeterministic and flagsAreDeterministic:
+            if options.useCompareJIT and res.lev == jsInteresting.JS_FINE and \
+                    jsInterestingOptions.shellIsDeterministic and flagsAreDeterministic:
                 linesToCompare = jitCompareLines(logPrefix + '-out.txt', "/*FCM*/")
                 jitcomparefilename = logPrefix + "-cj-in.js"
                 fileManipulation.writeLinesToFile(linesToCompare, jitcomparefilename)
-                (lithResult, lithDetails) = compareJIT.compareJIT(options.jsEngine, engineFlags, jitcomparefilename,
-                                                                  logPrefix + "-cj", options.knownPath, options.repo,
-                                                                  options.buildOptionsStr, options.timeout, targetTime)
-                if lithResult == lithOps.HAPPY:
+                anyBug = compareJIT.compareJIT(options.jsEngine, engineFlags, jitcomparefilename,
+                                               logPrefix + "-cj", options.repo,
+                                               options.buildOptionsStr, targetTime, jsInterestingOptions)
+                if not anyBug:
                     os.remove(jitcomparefilename)
-                if targetTime and lithResult != lithOps.HAPPY:
-                    jsInteresting.deleteLogs(logPrefix)
-                    return (lithResult, lithDetails)
+
             jsInteresting.deleteLogs(logPrefix)
 
 
 def jitCompareLines(jsfunfuzzOutputFilename, marker):
-    """Create a compareJIT file, using the lines marked by jsfunfuzz as valid for comparison"""
+    """Create a compareJIT file, using the lines marked by jsfunfuzz as valid for comparison."""
     lines = [
         "backtrace = function() { };\n",
         "dumpHeap = function() { };\n",
         "dumpObject = function() { };\n",
         "dumpStringRepresentation = function() { };\n",
         "evalInWorker = function() { };\n",
+        "getBacktrace = function() { };\n",
+        "getLcovInfo = function() { };\n",
+        "isAsmJSCompilationAvailable = function() { };\n",
         "offThreadCompileScript = function() { };\n",
         "printProfilerEvents = function() { };\n",
+        "saveStack = function() { };\n",
+        "wasmIsSupported = function() { return true; };\n",
         "// DDBEGIN\n"
     ]
     with open(jsfunfuzzOutputFilename, 'rb') as f:
@@ -222,7 +240,14 @@ def jitCompareLines(jsfunfuzzOutputFilename, marker):
             if line.startswith(marker):
                 sline = line[len(marker):]
                 divisionIsInconsistent = sps.isWin  # Really 'if MSVC' -- revisit if we add clang builds on Windows
-                if not (divisionIsInconsistent and mightUseDivision(sline)):
+                if divisionIsInconsistent and mightUseDivision(sline):
+                    pass
+                elif "newGlobal" in sline and "wasmIsSupported" in sline:
+                    # We only override wasmIsSupported above for the main global.
+                    # Hopefully, any imported tests that try to use wasmIsSupported within a newGlobal
+                    # will do so in a straightforward way where everything is on one line.
+                    pass
+                else:
                     lines.append(sline)
     lines += [
         "\ntry{print(uneval(this));}catch(e){}\n",
@@ -251,6 +276,7 @@ def mightUseDivision(code):
         i += 1
     return False
 
+
 assert not mightUseDivision("//")
 assert not mightUseDivision("// a")
 assert not mightUseDivision("/*FOO*/")
@@ -260,4 +286,4 @@ assert mightUseDivision("eval('//x'); a / b;")
 
 
 if __name__ == "__main__":
-    many_timed_runs(None, sps.createWtmpDir(os.getcwdu()), sys.argv[1:])
+    many_timed_runs(None, sps.createWtmpDir(os.getcwdu()), sys.argv[1:], createCollector.createCollector("jsfunfuzz"))

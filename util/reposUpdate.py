@@ -1,30 +1,33 @@
 #!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=invalid-name,missing-docstring
 #
 # This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this file,
-# You can obtain one at http://mozilla.org/MPL/2.0/.
-#
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 # To update specified repositories to default tip and provide a short list of latest checkins.
 # Only supports hg (Mercurial) for now.
 #
 # Assumes that the repositories are located in ../../trees/*.
 
+from __future__ import absolute_import, print_function
+
+from copy import deepcopy
 import logging
 import os
 import subprocesses as sps
 
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-ESR_NOW = 31
-ESR_NEXT = ESR_NOW + 7
 
 THIS_SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 REPO_PARENT_PATH = os.path.abspath(os.path.join(THIS_SCRIPT_DIRECTORY, os.pardir, os.pardir))
 
 # Add your repository here. Note that Valgrind does not have a hg repository.
-REPOS = ['gecko-dev', 'lithium'] + ['mozilla-' + x for x in ['inbound', 'central', 'aurora', 'beta', 'release',
-                                                             'esr' + str(ESR_NOW), 'esr' + str(ESR_NEXT)]]
+REPOS = ['gecko-dev', 'FuzzManager', 'lithium', 'octo'] + \
+    ['mozilla-' + x for x in ['inbound', 'central', 'beta', 'release']]
 
 if sps.isWin:
     # Assumes Git was installed from https://msysgit.github.io/
@@ -34,7 +37,7 @@ else:
 
 
 def typeOfRepo(r):
-    '''Returns the type of repository.'''
+    """Return the type of repository."""
     repoList = []
     repoList.append('.hg')
     repoList.append('.git')
@@ -45,7 +48,7 @@ def typeOfRepo(r):
 
 
 def updateRepo(repo):
-    '''Updates a repository. Returns False if missing; returns True if successful; raises an exception if updating fails.'''
+    """Update a repository. Return False if missing; return True if successful; raise an exception if updating fails."""
     assert os.path.isdir(repo)
     repoType = typeOfRepo(repo)
 
@@ -55,9 +58,10 @@ def updateRepo(repo):
         sps.timeSubprocess(['hg', 'log', '-r', 'default'], cwd=repo, vb=True)
     elif repoType == 'git':
         # Ignore exit codes so the loop can continue retrying up to number of counts.
-        sps.timeSubprocess([GITBINARY, 'fetch'],
-                           ignoreStderr=True, combineStderr=True, ignoreExitCode=True, cwd=repo, vb=True)
-        sps.timeSubprocess([GITBINARY, 'merge', '--ff-only', 'origin/master'],
+        gitenv = deepcopy(os.environ)
+        if sps.isWin:
+            gitenv['GIT_SSH_COMMAND'] = "~/../../mozilla-build/msys/bin/ssh.exe -F ~/.ssh/config"
+        sps.timeSubprocess([GITBINARY, 'pull', '--rebase'], env=gitenv,
                            ignoreStderr=True, combineStderr=True, ignoreExitCode=True, cwd=repo, vb=True)
     else:
         raise Exception('Unknown repository type: ' + repoType)
@@ -66,21 +70,26 @@ def updateRepo(repo):
 
 
 def updateRepos():
-    '''Updates Mercurial and Git repositories located in ~ and ~/trees .'''
+    """Update Mercurial and Git repositories located in ~ and ~/trees ."""
     trees = [
         os.path.normpath(os.path.join(REPO_PARENT_PATH)),
         os.path.normpath(os.path.join(REPO_PARENT_PATH, 'trees'))
     ]
     for tree in trees:
         for name in sorted(os.listdir(tree)):
-            if name in REPOS or name.startswith("funfuzz"):
-                print 'Updating %s ...' % name
-                updateRepo(os.path.join(tree, name))
+            namePath = os.path.join(tree, name)
+            if os.path.isdir(namePath) and (name in REPOS or name.startswith("funfuzz")):
+                print("Updating %s ..." % name)
+                updateRepo(namePath)
 
 
 def main():
     logger.info(sps.dateStr())
-    updateRepos()
+    try:
+        updateRepos()
+    except OSError as e:
+        print("WARNING: OSError hit:")
+        print(e)
     logger.info(sps.dateStr())
 
 

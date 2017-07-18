@@ -4,7 +4,7 @@
 
 Specify the failing revision hash in the "-e" parameter, along with desired "-b" options to build the desired SpiderMonkey build configuration. This failing revision hash must be from **Mercurial**.
 
-```funfuzz/autobisect-js/autoBisect.py -l bad -e FAILINGREV -b "--enable-debug --enable-more-deterministic --enable-nspr-build"```
+```funfuzz/autobisect-js/autoBisect.py -l bad -e FAILINGREV -b "--enable-debug --enable-more-deterministic"```
 
 When done, find the first working revision hash after the breakage, as below.
 
@@ -12,7 +12,7 @@ When done, find the first working revision hash after the breakage, as below.
 
 Similar to the above, but use "-s" instead of "-e".
 
-```funfuzz/autobisect-js/autoBisect.py -l bad -s FAILINGREV -b "--enable-debug --enable-more-deterministic --enable-nspr-build```
+```funfuzz/autobisect-js/autoBisect.py -l bad -s FAILINGREV -b "--enable-debug --enable-more-deterministic```
 
 **Q: What should I do with the known broken changeset ranges to prevent autoBisect from retesting those revisions?**
 
@@ -34,7 +34,7 @@ You can add the earliest known working **Mercurial** revision to the earliestKno
 
 **Q: Does autoBisect work on nightly SpiderMonkey js shells yet?**
 
-No, not yet. Currently it only uses ["tinderbox-builds" js shells](https://ftp.mozilla.org/pub/mozilla.org/firefox/tinderbox-builds/mozilla-inbound-macosx64-debug/) by default, which are stored on a per-checkin basis only for the past month. Patches accepted!
+No, not yet. Currently it only uses ["tinderbox-builds" js shells](https://archive.mozilla.org/pub/mozilla.org/firefox/tinderbox-builds/mozilla-inbound-macosx64-debug/) by default, which are stored on a per-checkin basis only for the past month. Patches accepted!
 
 **Q: How does autoBisect compare with [mozregression](http://mozilla.github.io/mozregression/)?**
 

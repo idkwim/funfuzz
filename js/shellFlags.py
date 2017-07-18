@@ -1,3 +1,13 @@
+#!/usr/bin/env python
+# coding=utf-8
+# pylint: disable=dangerous-default-value,import-error,invalid-name,line-too-long,missing-docstring,too-many-branches,too-many-statements,wrong-import-position
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+from __future__ import absolute_import, print_function
+
 import multiprocessing
 import os
 import random
@@ -10,8 +20,9 @@ path1 = os.path.abspath(os.path.join(path0, os.pardir, 'util'))
 sys.path.append(path1)
 import subprocesses as sps
 
+
 def memoize(f, cache={}):
-    '''Function decorator that caches function results.'''
+    """Function decorator that caches function results."""
     # From http://code.activestate.com/recipes/325205-cache-decorator-in-python-24/#c9
     def g(*args, **kwargs):
         key = (f, tuple(args), frozenset(kwargs.items()))
@@ -31,17 +42,42 @@ def chance(p):
 
 
 def randomFlagSet(shellPath):
-    '''
-    Returns a random list of command-line flags appropriate for the given shell.
-    Only works for spidermonkey js shell. Does not work for xpcshell.
-    '''
+    """Return a random list of CLI flags appropriate for the given shell.
 
+    Only works for spidermonkey js shell. Does not work for xpcshell.
+    """
     args = []
 
     ion = shellSupportsFlag(shellPath, "--ion") and chance(.8)
 
     if shellSupportsFlag(shellPath, '--fuzzing-safe'):
         args.append("--fuzzing-safe")  # --fuzzing-safe landed in bug 885361
+
+    # Landed in m-c changeset c0c1d923c292, see bug 1255008
+    if shellSupportsFlag(shellPath, '--ion-aa=flow-sensitive'):
+        if chance(.4):
+            args.append('--ion-aa=flow-sensitive')
+        elif shellSupportsFlag(shellPath, '--ion-aa=flow-insensitive') and chance(.4):
+            args.append('--ion-aa=flow-insensitive')
+
+    # See bug 932517, which had landed to fix this issue. Keeping this around for archives:
+    #   Original breakage in m-c rev 269359 : https://hg.mozilla.org/mozilla-central/rev/a0ccab2a6e28
+    #   Fix in m-c rev 269896: https://hg.mozilla.org/mozilla-central/rev/3bb8446a6d8d
+    # Anything in-between involving let probably needs "-e 'version(185);'" to see if we can bypass breakage
+    # if shellSupportsFlag(shellPath, "--execute='version(185);'"):
+    #     args.append("--execute='version(185);'")
+
+    # Note for future: --wasm-check-bce is only useful for x86 and ARM32
+
+    if shellSupportsFlag(shellPath, '--wasm-always-baseline') and chance(.5):
+        args.append("--wasm-always-baseline")  # --wasm-always-baseline landed in bug 1232205
+
+    if shellSupportsFlag(shellPath, '--ion-pgo=on') and chance(.2):
+        args.append("--ion-pgo=on")  # --ion-pgo=on landed in bug 1209515
+
+    if shellSupportsFlag(shellPath, '--ion-sincos=on') and chance(.5):
+        sincosValue = "on" if chance(0.5) else "off"
+        args.append("--ion-sincos=" + sincosValue)  # --ion-sincos=[on|off] landed in bug 984018
 
     if shellSupportsFlag(shellPath, '--ion-instruction-reordering=on') and chance(.2):
         args.append("--ion-instruction-reordering=on")  # --ion-instruction-reordering=on landed in bug 1195545
@@ -52,8 +88,8 @@ def randomFlagSet(shellPath):
     if shellSupportsFlag(shellPath, '--non-writable-jitcode') and chance(.3):
         args.append("--non-writable-jitcode")  # --non-writable-jitcode landed in bug 977805
 
-    if shellSupportsFlag(shellPath, "--execute='setJitCompilerOption(\"ion.forceinlineCaches\", 1)'") and chance(.1):
-        args.append("--execute='setJitCompilerOption(\"ion.forceinlineCaches\", 1)'")
+    if shellSupportsFlag(shellPath, "--execute=setJitCompilerOption('ion.forceinlineCaches',1)") and chance(.1):
+        args.append("--execute=setJitCompilerOption('ion.forceinlineCaches',1)")
 
     if shellSupportsFlag(shellPath, '--no-cgc') and chance(.1):
         args.append("--no-cgc")  # --no-cgc landed in bug 1126769
@@ -64,17 +100,16 @@ def randomFlagSet(shellPath):
     if shellSupportsFlag(shellPath, '--no-incremental-gc') and chance(.1):
         args.append("--no-incremental-gc")  # --no-incremental-gc landed in bug 958492
 
-    if shellSupportsFlag(shellPath, '--unboxed-arrays') and chance(.2):
-        args.append("--unboxed-arrays")  # --unboxed-arrays landed in bug 1146597
-
     if shellSupportsFlag(shellPath, '--no-unboxed-objects') and chance(.2):
         args.append("--no-unboxed-objects")  # --no-unboxed-objects landed in bug 1162199
 
-    #if shellSupportsFlag(shellPath, '--ion-sink=on') and chance(.2):
+    # if shellSupportsFlag(shellPath, '--ion-sink=on') and chance(.2):
     #    args.append("--ion-sink=on")  # --ion-sink=on landed in bug 1093674
 
     if shellSupportsFlag(shellPath, '--gc-zeal=0') and chance(.9):
-        gczealValue = 14 if chance(0.5) else random.randint(0, 14)  # Focus test compacting GC (14)
+        # Focus testing on CheckNursery (16), see:
+        #     https://hg.mozilla.org/mozilla-central/rev/bdbb5822afe1
+        gczealValue = 16 if chance(0.5) else random.randint(0, 16)
         args.append("--gc-zeal=" + str(gczealValue))  # --gc-zeal= landed in bug 1101602
 
     if shellSupportsFlag(shellPath, '--enable-small-chunk-size') and chance(.1):
@@ -116,8 +151,9 @@ def randomFlagSet(shellPath):
         else:
             args.append("--no-sse4")
 
-    if shellSupportsFlag(shellPath, '--no-fpu') and chance(.2):
-        args.append("--no-fpu")  # --no-fpu landed in bug 858022
+    # We should stop fuzzing --no-fpu according to the js devs...
+    # if shellSupportsFlag(shellPath, '--no-fpu') and chance(.2):
+    #     args.append("--no-fpu")  # --no-fpu landed in bug 858022
 
     if shellSupportsFlag(shellPath, '--no-asmjs') and chance(.5):
         args.append("--no-asmjs")
@@ -173,20 +209,18 @@ def randomFlagSet(shellPath):
             args.append("--ion-limit-script-size=off")
         # Backtracking (on by default as of 2015-04-15) and stupid landed in m-c changeset dc4887f61d2e
         # The stupid allocator isn't used by default and devs prefer not to have to fix fuzzbugs
-        #if shellSupportsFlag(shellPath, '--ion-regalloc=stupid') and chance(.2):
-            #args.append('--ion-regalloc=stupid')
+        # if shellSupportsFlag(shellPath, '--ion-regalloc=stupid') and chance(.2):
+            # args.append('--ion-regalloc=stupid')
         if shellSupportsFlag(shellPath, '--ion-regalloc=testbed') and chance(.2):
             args.append('--ion-regalloc=testbed')
-        if shellSupportsFlag(shellPath, '--ion-check-range-analysis'):
-            if chance(.3):
-                args.append('--ion-check-range-analysis')
-        if shellSupportsFlag(shellPath, '--ion-extra-checks'):
-            if chance(.3):
-                args.append('--ion-extra-checks')
+        if shellSupportsFlag(shellPath, '--ion-check-range-analysis') and chance(.3):
+            args.append('--ion-check-range-analysis')
+        if shellSupportsFlag(shellPath, '--ion-extra-checks') and chance(.3):
+            args.append('--ion-extra-checks')
     else:
         args.append("--no-ion")
 
-    #if chance(.05):
+    # if chance(.05):
     #    args.append("--execute=verifyprebarriers()")
 
     if chance(.05):
@@ -196,25 +230,28 @@ def randomFlagSet(shellPath):
 
 
 def basicFlagSets(shellPath):
-    '''
-    compareJIT uses these combinations of flags (as well as the original set of flags) when run
-    through Lithium and autoBisect.
-    '''
+    """These flag combos are used w/the original flag sets when run through Lithium & autoBisect."""
     if shellSupportsFlag(shellPath, "--no-threads"):
         basicFlagList = [
             # Parts of this flag permutation come from:
-            # https://hg.mozilla.org/mozilla-central/file/e3bf27190360/js/src/tests/lib/tests.py#l12
+            # https://hg.mozilla.org/mozilla-central/file/c91249f41e37/js/src/tests/lib/tests.py#l13
             ['--fuzzing-safe', '--no-threads', '--ion-eager'],  # compareJIT uses this first flag set as the sole baseline when fuzzing
             ['--fuzzing-safe', '--ion-offthread-compile=off', '--ion-eager'],
-            ['--fuzzing-safe', '--ion-offthread-compile=off', '--baseline-eager'],
-            ['--fuzzing-safe', '--no-threads', '--baseline-eager'],
-            ['--fuzzing-safe', '--no-threads', '--baseline-eager', '--no-fpu'],
-            ['--fuzzing-safe', '--no-threads', '--no-baseline', '--no-ion'],
+            ['--fuzzing-safe', '--ion-offthread-compile=off'],
+            ['--fuzzing-safe', '--baseline-eager'],
+            # ['--fuzzing-safe', '--baseline-eager', '--no-fpu'],  # --no-fpu seems to be deprecated now
+            ['--fuzzing-safe', '--no-baseline', '--no-ion'],
         ]
         if shellSupportsFlag(shellPath, "--non-writable-jitcode"):
             basicFlagList.append(['--fuzzing-safe', '--no-threads', '--ion-eager',
                                   '--non-writable-jitcode', '--ion-check-range-analysis',
                                   '--ion-extra-checks', '--no-sse3'])
+        if shellSupportsFlag(shellPath, "--no-wasm"):
+            basicFlagList.append(['--fuzzing-safe', '--no-baseline', '--no-asmjs',
+                                  '--no-wasm', '--no-native-regexp'])
+        if shellSupportsFlag(shellPath, "--wasm-always-baseline"):
+            basicFlagList.append(['--fuzzing-safe', '--no-threads', '--ion-eager',
+                                  '--wasm-always-baseline'])
         return basicFlagList
     elif shellSupportsFlag(shellPath, "--ion-offthread-compile=off"):
         basicFlagList = [
@@ -227,7 +264,7 @@ def basicFlagSets(shellPath):
             ['--fuzzing-safe', '--ion-offthread-compile=off', '--no-baseline', '--ion-eager'],  # Not in jit_test.py though...
             ['--fuzzing-safe', '--ion-offthread-compile=off', '--ion-eager'],  # Not in jit_test.py though...
             ['--fuzzing-safe', '--ion-offthread-compile=off', '--no-ion'],  # Not in jit_test.py though, see bug 848906 comment 1
-            ['--fuzzing-safe', '--ion-offthread-compile=off', '--no-fpu'],
+            # ['--fuzzing-safe', '--ion-offthread-compile=off', '--no-fpu'],  # --no-fpu seems to be deprecated now
         ]
         if shellSupportsFlag(shellPath, "--thread-count=1"):
             basicFlagList.append(['--fuzzing-safe', '--ion-offthread-compile=off', '--ion-eager'])
@@ -248,7 +285,7 @@ def basicFlagSets(shellPath):
             ['--fuzzing-safe', '--ion-parallel-compile=off', '--ion-eager'],  # Not in jit_test.py though...
             ['--fuzzing-safe', '--ion-parallel-compile=off', '--baseline-eager'],
             ['--fuzzing-safe', '--ion-parallel-compile=off', '--baseline-eager', '--no-ion'],  # See bug 848906 comment 1
-            ['--fuzzing-safe', '--ion-parallel-compile=off', '--baseline-eager', '--no-fpu'],
+            # ['--fuzzing-safe', '--ion-parallel-compile=off', '--baseline-eager', '--no-fpu'],  # --no-fpu seems to be deprecated now
         ]
         if shellSupportsFlag(shellPath, "--thread-count=1"):
             basicFlagList.append(['--fuzzing-safe', '--ion-eager', '--ion-parallel-compile=off'])
@@ -265,7 +302,7 @@ def basicFlagSets(shellPath):
 
 def testRandomFlags():
     for _ in range(100):
-        print ' '.join(randomFlagSet(sys.argv[1]))
+        print(" ".join(randomFlagSet(sys.argv[1])))
 
 
 if __name__ == "__main__":

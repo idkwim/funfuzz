@@ -1,3 +1,8 @@
+
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 function confused(s)
 {
   if (jsshell) {
@@ -10,7 +15,8 @@ function confused(s)
 function foundABug(summary, details)
 {
   // Magic pair of strings that jsInteresting.py looks for
-  printImportant("Found a bug: " + summary);
+  // Break up the following string so internal js functions do not print it deliberately
+  printImportant("Found" + " a bug: " + summary);
   if (details) {
     printImportant(details);
   }
